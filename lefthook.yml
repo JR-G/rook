@@ -1,0 +1,22 @@
+pre-commit:
+  parallel: true
+  commands:
+    fmt:
+      glob: "*.go"
+      run: gofumpt -l -w .
+      stage_fixed: true
+    lint:
+      glob: "*.go"
+      run: golangci-lint run
+    vet:
+      glob: "*.go"
+      run: go vet ./...
+    filesize:
+      run: scripts/check-filesize.sh
+    secrets:
+      run: scripts/check-secrets.sh
+
+pre-push:
+  commands:
+    coverage:
+      run: scripts/check-coverage.sh 95

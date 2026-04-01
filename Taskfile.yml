@@ -1,0 +1,55 @@
+version: "3"
+
+tasks:
+  build:
+    desc: Build the rook binary
+    cmds:
+      - go build -o bin/rook ./cmd/rook
+    sources:
+      - ./**/*.go
+
+  run:
+    desc: Build and run rook with the local config
+    deps: [build]
+    cmds:
+      - ./bin/rook serve -config config/rook.toml
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test -race -cover ./...
+
+  cover:
+    desc: Run tests with coverage report
+    cmds:
+      - go test -race -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+      - go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run linter
+    cmds:
+      - golangci-lint run ./...
+
+  fmt:
+    desc: Format all Go files
+    cmds:
+      - gofumpt -l -w .
+
+  hooks:
+    desc: Install git hooks
+    cmds:
+      - lefthook install
+
+  clean:
+    desc: Remove build artefacts
+    cmds:
+      - rm -rf bin/ coverage.out coverage.html
+
+  setup:
+    desc: Install development tools and hooks
+    cmds:
+      - go install mvdan.cc/gofumpt@latest
+      - go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
+      - go install github.com/evilmartians/lefthook@latest
+      - ./scripts/install.sh

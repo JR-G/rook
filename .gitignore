@@ -1,0 +1,7 @@
+bin/
+coverage.html
+coverage.out
+data/
+config/rook.toml
+.task/
+.DS_Store

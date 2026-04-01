@@ -1,0 +1,55 @@
+[service]
+name = "rook"
+log_level = "info"
+data_dir = "./data"
+timezone = "UTC"
+
+[slack]
+bot_token = ""
+app_token = ""
+allow_dm = true
+mention_required_in_channels = true
+allowed_channels = []
+denied_channels = []
+max_concurrent_handlers = 2
+
+[ollama]
+host = "http://127.0.0.1:11434"
+chat_model = "phi4-mini"
+embedding_model = "nomic-embed-text"
+temperature = 0.2
+chat_timeout = "90s"
+embed_timeout = "30s"
+
+[memory]
+db_path = "./data/rook.sqlite"
+max_prompt_items = 8
+max_episode_items = 4
+max_search_results = 12
+episode_retention_days = 60
+consolidation_interval = "6h"
+min_write_importance = 0.6
+reminder_poll_interval = "30s"
+
+[persona]
+core_constitution_file = "./identity/core_constitution.md"
+stable_identity_seed_file = "./identity/stable_identity.md"
+voice_seed_file = "./identity/voice_seed.md"
+
+[web]
+enabled = false
+provider = "duckduckgo"
+timeout = "15s"
+max_results = 5
+user_agent = "rook/0.1"
+auto_on_freshness = true
+
+  [web.ollama]
+  host = "https://ollama.com"
+  api_key = ""
+
+[squad0]
+enabled = false
+observed_user_ids = []
+observed_bot_ids = []
+keywords = ["squad0"]

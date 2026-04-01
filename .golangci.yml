@@ -1,0 +1,72 @@
+run:
+  timeout: 5m
+
+linters:
+  enable:
+    - errcheck
+    - govet
+    - staticcheck
+    - unused
+    - gosimple
+    - ineffassign
+    - typecheck
+    - gocritic
+    - revive
+    - gofumpt
+    - misspell
+    - unconvert
+    - unparam
+    - nakedret
+    - nestif
+    - varnamelen
+    - exhaustive
+    - forcetypeassert
+    - goconst
+    - nilerr
+    - prealloc
+
+linters-settings:
+  gocritic:
+    enabled-tags:
+      - diagnostic
+      - style
+  revive:
+    rules:
+      - name: blank-imports
+      - name: context-as-argument
+      - name: dot-imports
+      - name: error-return
+      - name: error-strings
+      - name: exported
+      - name: increment-decrement
+      - name: var-naming
+      - name: range
+      - name: receiver-naming
+      - name: indent-error-flow
+  nakedret:
+    max-func-lines: 30
+  misspell:
+    locale: UK
+  nestif:
+    min-complexity: 1
+  varnamelen:
+    max-distance: 5
+    min-name-length: 2
+    ignore-names:
+      - i
+      - j
+      - k
+      - ok
+      - db
+    ignore-decls:
+      - t *testing.T
+      - b *testing.B
+      - r *http.Request
+      - w http.ResponseWriter
+      - ctx context.Context
+      - err error
+
+issues:
+  exclude-use-default: false
+  max-issues-per-linter: 0
+  max-same-issues: 0
