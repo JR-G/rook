@@ -20,3 +20,11 @@ The Slack bot exposes runtime commands in chat:
 - `remind`
 
 launchd assets live in `launchd/` and `scripts/install-launchd.sh`.
+
+Install and load the agent:
+
+```bash
+task build
+./scripts/install-launchd.sh
+launchctl list | grep io.rook.agent
+```

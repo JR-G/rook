@@ -7,10 +7,10 @@ pre-commit:
       stage_fixed: true
     lint:
       glob: "*.go"
-      run: golangci-lint run
+      run: ./scripts/with-go-cache.sh golangci-lint run
     vet:
       glob: "*.go"
-      run: go vet ./...
+      run: ./scripts/with-go-cache.sh go vet ./...
     filesize:
       run: scripts/check-filesize.sh
     maxlines:

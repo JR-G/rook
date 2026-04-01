@@ -3,6 +3,10 @@
 set -euo pipefail
 
 threshold="${1:-95}"
+repo_root="$(cd "$(dirname "$0")/.." && pwd)"
+export GOCACHE="${GOCACHE:-$repo_root/.cache/go-build}"
+mkdir -p "$GOCACHE"
+
 go test -coverprofile=coverage.out ./... >/dev/null
 coverage="$(go tool cover -func=coverage.out | awk '/^total:/ { sub("%", "", $3); print $3 }')"
 

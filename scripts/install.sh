@@ -2,7 +2,7 @@
 
 set -euo pipefail
 
-mkdir -p bin data
+mkdir -p .cache/go-build bin data data/logs
 
 if [ ! -f config/rook.toml ]; then
   cp config/rook.example.toml config/rook.toml

@@ -4,7 +4,7 @@ tasks:
   build:
     desc: Build the rook binary
     cmds:
-      - go build -o bin/rook ./cmd/rook
+      - ./scripts/with-go-cache.sh go build -o bin/rook ./cmd/rook
     sources:
       - ./**/*.go
 
@@ -14,22 +14,28 @@ tasks:
     cmds:
       - ./bin/rook serve -config config/rook.toml
 
+  launchd-install:
+    desc: Install the launchd agent for rook
+    deps: [build]
+    cmds:
+      - ./scripts/install-launchd.sh
+
   test:
     desc: Run all tests
     cmds:
-      - go test -race -cover ./...
+      - ./scripts/with-go-cache.sh go test -race -cover ./...
 
   cover:
     desc: Run tests with coverage report
     cmds:
-      - go test -race -coverprofile=coverage.out ./...
-      - go tool cover -func=coverage.out
-      - go tool cover -html=coverage.out -o coverage.html
+      - ./scripts/with-go-cache.sh go test -race -coverprofile=coverage.out ./...
+      - ./scripts/with-go-cache.sh go tool cover -func=coverage.out
+      - ./scripts/with-go-cache.sh go tool cover -html=coverage.out -o coverage.html
 
   lint:
     desc: Run linter
     cmds:
-      - golangci-lint run ./...
+      - ./scripts/with-go-cache.sh golangci-lint run ./...
 
   check-lines:
     desc: Enforce the 500-line source file cap

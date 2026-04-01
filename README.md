@@ -15,6 +15,12 @@ task build
 ./bin/rook serve -config config/rook.toml
 ```
 
+For launchd installation:
+
+```bash
+task launchd-install
+```
+
 ## Design
 
 - Persistent Slack presence through Socket Mode
@@ -23,6 +29,20 @@ task build
 - Explicit tool boundary for web retrieval
 - Slack-level observation boundary for `squad0`
 - launchd-friendly single binary deployment
+
+## Open-Source Safety
+
+- No secrets are committed; tokens live in local config or environment variables.
+- Identity seed files are generic and contain no personal defaults.
+- Memory stays local in SQLite.
+- Web retrieval is optional and disabled by default.
+- Hooks block secret-like strings, oversized files, and files over 500 lines.
+
+## Defaults
+
+- Chat model: `phi4-mini`
+- Embedding model: `nomic-embed-text`
+- Web provider: disabled by default, optional `duckduckgo`
 
 ## Docs
 
