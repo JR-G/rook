@@ -13,6 +13,8 @@ pre-commit:
       run: go vet ./...
     filesize:
       run: scripts/check-filesize.sh
+    maxlines:
+      run: scripts/check-max-lines.sh 500
     secrets:
       run: scripts/check-secrets.sh
 

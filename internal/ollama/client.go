@@ -40,11 +40,16 @@ type Client struct {
 
 // New creates a new Ollama client.
 func New(host string, chatTimeout, embedTimeout time.Duration) *Client {
+	return NewWithHTTPClient(host, chatTimeout, embedTimeout, &http.Client{
+		Timeout: chatTimeout,
+	})
+}
+
+// NewWithHTTPClient creates a new Ollama client with a custom HTTP client.
+func NewWithHTTPClient(host string, chatTimeout, embedTimeout time.Duration, httpClient *http.Client) *Client {
 	return &Client{
-		host: strings.TrimRight(host, "/"),
-		httpClient: &http.Client{
-			Timeout: chatTimeout,
-		},
+		host:         strings.TrimRight(host, "/"),
+		httpClient:   httpClient,
 		chatTimeout:  chatTimeout,
 		embedTimeout: embedTimeout,
 	}
