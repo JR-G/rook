@@ -114,15 +114,26 @@ type Squad0Config struct {
 	Keywords        []string `toml:"keywords"`
 }
 
+// AutonomyConfig configures proactive observation and scheduled output.
+type AutonomyConfig struct {
+	Enabled              bool     `toml:"enabled"`
+	ObserveAgentChannels bool     `toml:"observe_agent_channels"`
+	WeeknotesEnabled     bool     `toml:"weeknotes_enabled"`
+	WeeknotesChannel     string   `toml:"weeknotes_channel"`
+	WeeknotePostTime     string   `toml:"weeknote_post_time"`
+	PollInterval         Duration `toml:"poll_interval"`
+}
+
 // Config is the root application configuration.
 type Config struct {
-	Service ServiceConfig `toml:"service"`
-	Slack   SlackConfig   `toml:"slack"`
-	Ollama  OllamaConfig  `toml:"ollama"`
-	Memory  MemoryConfig  `toml:"memory"`
-	Persona PersonaConfig `toml:"persona"`
-	Web     WebConfig     `toml:"web"`
-	Squad0  Squad0Config  `toml:"squad0"`
+	Service  ServiceConfig  `toml:"service"`
+	Slack    SlackConfig    `toml:"slack"`
+	Ollama   OllamaConfig   `toml:"ollama"`
+	Memory   MemoryConfig   `toml:"memory"`
+	Persona  PersonaConfig  `toml:"persona"`
+	Web      WebConfig      `toml:"web"`
+	Squad0   Squad0Config   `toml:"squad0"`
+	Autonomy AutonomyConfig `toml:"autonomy"`
 }
 
 // Default returns conservative defaults for local operation.
@@ -175,6 +186,11 @@ func Default() Config {
 		},
 		Squad0: Squad0Config{
 			Keywords: []string{"squad0"},
+		},
+		Autonomy: AutonomyConfig{
+			ObserveAgentChannels: true,
+			WeeknotePostTime:     "10:00",
+			PollInterval:         Duration{Duration: time.Minute},
 		},
 	}
 }
@@ -235,6 +251,8 @@ func applyEnv(cfg *Config) {
 
 	overrideString(&cfg.Web.Provider, "ROOK_WEB_PROVIDER")
 	overrideString(&cfg.Web.Ollama.APIKey, "ROOK_WEB_OLLAMA_API_KEY")
+	overrideString(&cfg.Autonomy.WeeknotesChannel, "ROOK_AUTONOMY_WEEKNOTES_CHANNEL")
+	overrideString(&cfg.Autonomy.WeeknotePostTime, "ROOK_AUTONOMY_WEEKNOTE_POST_TIME")
 }
 
 func normalise(cfg *Config) {
@@ -345,7 +363,32 @@ func validate(cfg Config) error {
 		return errors.New("persona.voice_seed_file must not be empty")
 	case cfg.Web.MaxResults < 1:
 		return errors.New("web.max_results must be at least 1")
+	case cfg.Autonomy.PollInterval.Duration < 0:
+		return errors.New("autonomy.poll_interval must be zero or greater")
+	case cfg.Autonomy.WeeknotesEnabled && strings.TrimSpace(cfg.Autonomy.WeeknotesChannel) == "":
+		return errors.New("autonomy.weeknotes_channel must not be empty when weeknotes are enabled")
+	case cfg.Autonomy.WeeknotePostTime != "" && !validClockHHMM(cfg.Autonomy.WeeknotePostTime):
+		return errors.New("autonomy.weeknote_post_time must use HH:MM in 24-hour time")
 	}
 
 	return nil
+}
+
+func validClockHHMM(value string) bool {
+	_, _, err := ParseClockHHMM(value)
+
+	return err == nil
+}
+
+// ParseClockHHMM parses an HH:MM 24-hour clock value.
+func ParseClockHHMM(value string) (hour, minute int, err error) {
+	parsed, err := time.Parse("15:04", strings.TrimSpace(value))
+	if err != nil {
+		return 0, 0, err
+	}
+
+	hour = parsed.Hour()
+	minute = parsed.Minute()
+
+	return hour, minute, nil
 }

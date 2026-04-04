@@ -53,6 +53,7 @@ type agentClient interface {
 type ollamaClient interface {
 	Health(context.Context) (ollama.Health, error)
 	Embed(context.Context, string, string) ([]float64, error)
+	ChatStructured(context.Context, string, []ollama.Message, float64, any) (ollama.ChatResult, error)
 }
 
 type slackClient interface {
@@ -164,6 +165,7 @@ func (s *Service) Run(ctx context.Context) error {
 		s.currentConfig().Web.Enabled,
 	)
 	go s.runReminderLoop(ctx)
+	go s.runAutonomyLoop(ctx)
 
 	err := s.transport.Run(ctx, s.HandleInbound)
 	if err != nil && !errors.Is(err, context.Canceled) {
@@ -205,16 +207,16 @@ func (s *Service) HandleInbound(ctx context.Context, message slacktransport.Inbo
 }
 
 func (s *Service) processMessage(ctx context.Context, message slacktransport.InboundMessage) error {
-	observed, err := s.observeSquad0(ctx, message)
-	if err != nil {
-		return err
-	}
 	shouldRespond, err := s.shouldRespond(ctx, message)
 	if err != nil {
 		return err
 	}
+	observed, err := s.observeAmbientActivity(ctx, message, shouldRespond)
+	if err != nil {
+		return err
+	}
 	if observed && !shouldRespond {
-		s.logger.Info("observed squad0 message without reply", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
+		s.logger.Info("observed slack activity without reply", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 		return nil
 	}
 	if !shouldRespond {
@@ -380,6 +382,9 @@ func (s *Service) shouldRespond(ctx context.Context, message slacktransport.Inbo
 	}
 	if message.Mentioned {
 		return true, nil
+	}
+	if strings.TrimSpace(message.BotID) != "" {
+		return false, nil
 	}
 	if strings.TrimSpace(message.ThreadTS) == "" {
 		return false, nil

@@ -18,5 +18,13 @@ Key sections:
 - `persona`: file paths for constitution and seed identity layers
 - `web`: optional search provider settings
 - `squad0`: Slack-level observation settings
+- `autonomy`: ambient observation and scheduled proactive output such as weeknotes
+
+For the first autonomous scheduled task:
+
+- set `autonomy.enabled = true`
+- set `autonomy.weeknotes_enabled = true`
+- set `autonomy.weeknotes_channel` to the Slack channel ID for `#weeknotes`
+- keep `autonomy.weeknote_post_time = "10:00"` for a Friday 10am local post
 
 See [`config/rook.example.toml`](../config/rook.example.toml) for the full example.

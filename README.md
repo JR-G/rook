@@ -32,6 +32,8 @@ task launchd-install
 - Persistent Slack presence through Socket Mode
 - Local-first inference through Ollama over `localhost`
 - SQLite memory with embeddings, consolidation, decay, and persona layers
+- Ambient observation of other Slack agents without depending on their internals
+- Scheduled autonomous posts such as a Friday 10:00 weeknote summary
 - Explicit tool boundary for web retrieval
 - Slack-level observation boundary for `squad0`
 - launchd-friendly single binary deployment

@@ -27,6 +27,14 @@ The Slack bot exposes runtime commands in chat:
 - `reload`
 - `remind`
 
+Autonomous behavior is configured in `config/rook.toml`. For the built-in weeknote job, enable:
+
+- `autonomy.enabled = true`
+- `autonomy.weeknotes_enabled = true`
+- `autonomy.weeknotes_channel = "C..."`
+
+The weeknote scheduler uses the service timezone and posts once per week after Friday 10:00 local time.
+
 launchd assets live in `launchd/` and `scripts/install-launchd.sh`.
 The launchd service starts `scripts/run-rook.sh`, which reads Slack tokens from macOS Keychain and exports them as `ROOK_SLACK_*` environment variables before executing the Go binary.
 

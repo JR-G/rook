@@ -55,3 +55,12 @@ enabled = false
 observed_user_ids = []
 observed_bot_ids = []
 keywords = ["squad0"]
+
+[autonomy]
+enabled = false
+observe_agent_channels = true
+weeknotes_enabled = false
+# Use the Slack channel ID for reliability, for example "C0123456789".
+weeknotes_channel = ""
+weeknote_post_time = "10:00"
+poll_interval = "1m"
