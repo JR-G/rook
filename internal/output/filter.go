@@ -214,7 +214,12 @@ func removeInternalLines(input string) string {
 			strings.HasPrefix(lower, "core constitution:"),
 			strings.HasPrefix(lower, "stable identity:"),
 			strings.HasPrefix(lower, "evolving voice:"),
-			strings.HasPrefix(lower, "slack output rules:"):
+			strings.HasPrefix(lower, "slack output rules:"),
+			strings.HasPrefix(lower, "let me write:"),
+			strings.HasPrefix(lower, "i will write:"),
+			strings.HasPrefix(lower, "response:"),
+			strings.HasPrefix(lower, "block:"),
+			trimmed == "<final>" || trimmed == "</final>":
 			continue
 		}
 

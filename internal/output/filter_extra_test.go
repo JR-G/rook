@@ -93,6 +93,16 @@ func TestCleanUnwrapsPlainTextBlockWrapper(t *testing.T) {
 	}
 }
 
+func TestCleanStripsScaffoldingLines(t *testing.T) {
+	t.Parallel()
+
+	filter := New()
+	got := filter.Clean("<final>\nLet me write:\nI will write:\nResponse:\n<final>\nKeep the thread steady.\n</final>")
+	if got != "Keep the thread steady." {
+		t.Fatalf("unexpected scaffolding cleanup %q", got)
+	}
+}
+
 func TestUnwrapStructuredTextHelpers(t *testing.T) {
 	t.Parallel()
 
