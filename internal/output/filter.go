@@ -12,7 +12,10 @@ var (
 	finalBlockPattern    = regexp.MustCompile(`(?is)<final>\s*(.*?)\s*</final>`)
 )
 
-const invalidStructuredReply = "I generated internal output instead of a user-facing reply. Please try again."
+const (
+	invalidStructuredReply = "I generated internal output instead of a user-facing reply. Please try again."
+	openFinalTag           = "<final>"
+)
 
 // Filter sanitises model output before it is shown in Slack.
 type Filter struct {
@@ -61,7 +64,7 @@ func extractStructuredReply(input string) (string, bool) {
 		return "", false
 	}
 
-	return jsonReply, true
+	return unwrapStructuredText(jsonReply)
 }
 
 func extractFinalBlock(input string) (string, bool) {
@@ -96,6 +99,55 @@ func extractPrimaryText(input string) string {
 	}
 
 	return ""
+}
+
+func unwrapStructuredText(input string) (string, bool) {
+	trimmed := strings.TrimSpace(input)
+	if trimmed == "" {
+		return "", false
+	}
+
+	if finalReply, ok := extractFinalBlock(trimmed); ok {
+		return finalReply, true
+	}
+
+	lowerTrimmed := strings.ToLower(trimmed)
+	for _, prefix := range []string{"block:", "reply:", "final:"} {
+		if !strings.HasPrefix(lowerTrimmed, prefix) {
+			continue
+		}
+		trimmed = strings.TrimSpace(trimmed[len(prefix):])
+		break
+	}
+
+	if trimmed == "" {
+		return "", false
+	}
+	if finalReply, ok := extractFinalBlock(trimmed); ok {
+		return finalReply, true
+	}
+	if finalReply, ok := extractOpenFinalRemainder(trimmed); ok {
+		return finalReply, true
+	}
+
+	return trimmed, true
+}
+
+func extractOpenFinalRemainder(input string) (string, bool) {
+	lowerInput := strings.ToLower(input)
+	index := strings.Index(lowerInput, openFinalTag)
+	if index < 0 {
+		return "", false
+	}
+
+	remainder := strings.TrimSpace(input[index+len(openFinalTag):])
+	remainder = strings.TrimSuffix(remainder, "</final>")
+	remainder = strings.TrimSpace(remainder)
+	if remainder == "" {
+		return "", false
+	}
+
+	return remainder, true
 }
 
 func removeInternalLines(input string) string {

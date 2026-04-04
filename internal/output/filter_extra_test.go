@@ -72,3 +72,52 @@ func TestExtractStructuredReply(t *testing.T) {
 		t.Fatal("did not expect plain text to be accepted as structured output")
 	}
 }
+
+func TestCleanUnwrapsNestedBlockWrappers(t *testing.T) {
+	t.Parallel()
+
+	filter := New()
+	got := filter.Clean(`{"text":"block:\n<final>\nRook keeps an eye on the weather of the work.\n"}`)
+	if got != "Rook keeps an eye on the weather of the work." {
+		t.Fatalf("unexpected nested block cleanup %q", got)
+	}
+}
+
+func TestUnwrapStructuredTextHelpers(t *testing.T) {
+	t.Parallel()
+
+	reply, ok := unwrapStructuredText("reply: steady course")
+	if !ok || reply != "steady course" {
+		t.Fatalf("unexpected reply unwrap %#v ok=%t", reply, ok)
+	}
+
+	reply, ok = extractOpenFinalRemainder("block:\n<final>\nKeep moving.")
+	if !ok || reply != "Keep moving." {
+		t.Fatalf("unexpected open final unwrap %#v ok=%t", reply, ok)
+	}
+
+	if _, ok = extractOpenFinalRemainder("plain text"); ok {
+		t.Fatal("did not expect plain text to look like an open final block")
+	}
+	if _, ok = unwrapStructuredText("   "); ok {
+		t.Fatal("did not expect blank text to unwrap")
+	}
+}
+
+func TestStructuredExtractionEdgeCases(t *testing.T) {
+	t.Parallel()
+
+	if got := extractPrimaryText(`["reply"]`); got != `["reply"]` {
+		t.Fatalf("unexpected non-object json fallback %q", got)
+	}
+
+	reply, ok := unwrapStructuredText("final: <final>Trim to the point.</final>")
+	if !ok || reply != "Trim to the point." {
+		t.Fatalf("unexpected final-prefix unwrap %#v ok=%t", reply, ok)
+	}
+
+	reply, ok = extractOpenFinalRemainder("<final>\nKeep the thread alive.\n</final>")
+	if !ok || reply != "Keep the thread alive." {
+		t.Fatalf("unexpected closed final remainder %#v ok=%t", reply, ok)
+	}
+}
