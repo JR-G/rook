@@ -3,24 +3,39 @@ package agent
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/JR-G/rook/internal/memory"
 )
+
+type queryProfile struct {
+	MetaReflection      bool
+	ShortThreadFollowUp bool
+}
 
 func adjustRetrievalForQuery(
 	query string,
 	channelID string,
 	threadTS string,
+	threadEpisodes []memory.Episode,
 	retrieval memory.RetrievalContext,
 ) memory.RetrievalContext {
 	retrieval.Episodes = excludeThreadEpisodes(retrieval.Episodes, channelID, threadTS)
-	if !isMetaReflectionQuery(query) {
-		return retrieval
+	if len(threadEpisodes) > 0 {
+		retrieval.Episodes = nil
+	}
+	if analyseQuery(query, threadEpisodes).MetaReflection {
+		retrieval.Episodes = nil
 	}
 
-	retrieval.Episodes = nil
-
 	return retrieval
+}
+
+func analyseQuery(query string, threadEpisodes []memory.Episode) queryProfile {
+	return queryProfile{
+		MetaReflection:      isMetaReflectionQuery(query),
+		ShortThreadFollowUp: isShortThreadFollowUp(query, threadEpisodes),
+	}
 }
 
 func excludeThreadEpisodes(episodes []memory.Episode, channelID, threadTS string) []memory.Episode {
@@ -58,6 +73,37 @@ func isMetaReflectionQuery(query string) bool {
 	}
 	for _, trigger := range triggers {
 		if strings.Contains(lowerQuery, trigger) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func isShortThreadFollowUp(query string, threadEpisodes []memory.Episode) bool {
+	if len(threadEpisodes) == 0 || !hasAssistantTurn(threadEpisodes) {
+		return false
+	}
+
+	lowerQuery := strings.ToLower(strings.TrimSpace(query))
+	if lowerQuery == "" {
+		return false
+	}
+
+	wordCount := len(strings.FieldsFunc(lowerQuery, func(char rune) bool {
+		return unicode.IsSpace(char) || strings.ContainsRune("?!.,;:'\"", char)
+	}))
+
+	if wordCount == 0 {
+		return false
+	}
+
+	return wordCount <= 3 || (strings.HasSuffix(lowerQuery, "?") && len(lowerQuery) <= 24)
+}
+
+func hasAssistantTurn(episodes []memory.Episode) bool {
+	for _, episode := range episodes {
+		if episode.Source == "assistant" {
 			return true
 		}
 	}

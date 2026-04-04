@@ -134,6 +134,12 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 	threadEpisodes = trimCurrentUserEcho(request.Text, threadEpisodes)
+	profile := analyseQuery(request.Text, threadEpisodes)
+
+	runtimeState, err := s.memoryStateText(ctx)
+	if err != nil {
+		return Response{}, err
+	}
 
 	var (
 		searchResults []web.Result
@@ -146,8 +152,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 
-	retrieval = adjustRetrievalForQuery(request.Text, request.ChannelID, request.ThreadTS, retrieval)
-	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, searchResults, usedWeb)
+	retrieval = adjustRetrievalForQuery(request.Text, request.ChannelID, request.ThreadTS, threadEpisodes, retrieval)
+	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, runtimeState, searchResults, usedWeb, profile)
 	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
@@ -199,6 +205,21 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		UsedWeb:     usedWeb,
 		WebProvider: s.searcher.Provider(),
 	}, nil
+}
+
+func (s *Service) memoryStateText(ctx context.Context) (string, error) {
+	health, err := s.store.Health(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	return fmt.Sprintf(
+		"- local memory db healthy: %t\n- durable memory items: %d\n- stored episodes: %d\n- pending reminders: %d",
+		health.Reachable,
+		health.MemoryCount,
+		health.EpisodeCount,
+		health.PendingReminds,
+	), nil
 }
 
 func (s *Service) persistCandidate(ctx context.Context, cfg Config, candidate memory.Candidate) error {
@@ -330,8 +351,10 @@ func buildUserPrompt(
 	query string,
 	retrieval memory.RetrievalContext,
 	threadEpisodes []memory.Episode,
+	runtimeState string,
 	searchResults []web.Result,
 	usedWeb bool,
+	profile queryProfile,
 ) string {
 	var builder strings.Builder
 	builder.WriteString("Internal context below is for reasoning only.\n")
@@ -345,14 +368,13 @@ func buildUserPrompt(
 	builder.WriteString("- Stay restrained and useful, but do not sound generic.\n\n")
 	builder.WriteString("User request:\n")
 	builder.WriteString(query)
-	if len(threadEpisodes) > 0 {
-		builder.WriteString("\n\nCurrent thread:\n")
-		builder.WriteString(renderThreadEpisodes(threadEpisodes))
-		builder.WriteString("\n\nContinue the live thread naturally. Respond to the latest turn without restarting the conversation from scratch.")
-		builder.WriteString("\nIf the latest turn is a short follow-up, advance or clarify the last answer instead of restating it with minor wording changes.")
-	}
+	builder.WriteString(renderThreadSection(threadEpisodes, profile))
 	builder.WriteString("\n\nRelevant memory:\n")
 	builder.WriteString(renderMemoryContext(retrieval))
+	if runtimeState != "" {
+		builder.WriteString("\n\nCurrent runtime state:\n")
+		builder.WriteString(runtimeState)
+	}
 
 	if usedWeb {
 		builder.WriteString("\n\nLive web results:\n")
@@ -360,15 +382,36 @@ func buildUserPrompt(
 		builder.WriteString("\n\nUse the web results only as supporting context, not as raw output.")
 	}
 
-	if isMetaReflectionQuery(query) {
+	if profile.MetaReflection {
 		builder.WriteString("\n\nMeta-question guidance:\n")
 		builder.WriteString("- Answer from rook's present stance, not like a service status line.\n")
 		builder.WriteString("- Name one current concern, judgement, or orientation when useful.\n")
 		builder.WriteString("- Avoid canned phrasing such as 'privacy, time, and clear action' unless it is genuinely the point.\n")
 		builder.WriteString("- A brief metaphor is welcome if it clarifies the answer.\n")
 	}
+	builder.WriteString("\n\nState guidance:\n")
+	builder.WriteString("- If the user asks about your memory, state, or continuity, answer concretely from Current runtime state and Relevant memory.\n")
+	builder.WriteString("- Distinguish durable memory from recent thread context when that matters.\n")
+	builder.WriteString("- If something is still sparse or immature, say that plainly instead of bluffing.\n")
 
 	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
+
+	return builder.String()
+}
+
+func renderThreadSection(threadEpisodes []memory.Episode, profile queryProfile) string {
+	if len(threadEpisodes) == 0 {
+		return ""
+	}
+
+	var builder strings.Builder
+	builder.WriteString("\n\nCurrent thread:\n")
+	builder.WriteString(renderThreadEpisodes(threadEpisodes))
+	builder.WriteString("\n\nContinue the live thread naturally. Respond to the latest turn without restarting the conversation from scratch.")
+	builder.WriteString("\nIf the latest turn is a short follow-up, advance or clarify the last answer instead of restating it with minor wording changes.")
+	if profile.ShortThreadFollowUp {
+		builder.WriteString("\nThis is a short follow-up. Do not repeat the previous reply. Unpack it, answer the implied question, or name concrete examples.")
+	}
 
 	return builder.String()
 }
