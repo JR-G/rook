@@ -6,6 +6,8 @@ import (
 	"time"
 )
 
+const assistantEpisodeSource = "assistant"
+
 // SearchContext retrieves only the most relevant prompt memory.
 func (s *Store) SearchContext(ctx context.Context, query string, queryEmbedding []float64, limits RetrievalLimits) (RetrievalContext, error) {
 	items, err := s.loadItems(ctx)
@@ -186,8 +188,8 @@ func (s *Store) HasAssistantReplyInThread(ctx context.Context, channelID, thread
 		FROM episodes
 		WHERE channel_id = ?
 		  AND thread_ts = ?
-		  AND source = 'assistant'
-	`, channelID, threadTS).Scan(&count); err != nil {
+		  AND source = ?
+	`, channelID, threadTS, assistantEpisodeSource).Scan(&count); err != nil {
 		return false, err
 	}
 
@@ -225,6 +227,10 @@ func scoreEpisodes(episodes []Episode, query string, now time.Time) (generalHits
 	generalHits = make([]EpisodeHit, 0, len(episodes))
 	squad0Hits = make([]EpisodeHit, 0, len(episodes))
 	for _, episode := range episodes {
+		if episode.Source == assistantEpisodeSource {
+			continue
+		}
+
 		candidateTokens := mergeUnique(tokenize(episode.Summary), tokenize(episode.Text))
 		score := 0.7*keywordScore(queryTokens, candidateTokens) + 0.3*recencyScore(episode.CreatedAt, now)
 		if score < 0.1 {

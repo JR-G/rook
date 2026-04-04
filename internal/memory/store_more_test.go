@@ -149,6 +149,19 @@ func TestSearchContextAndReminderBranches(t *testing.T) {
 		t.Fatalf("unexpected zero-limit thread episodes %#v err=%v", zeroLimitThreadEpisodes, err)
 	}
 
+	context, err := store.SearchContext(ctx, "privacy time clear action", nil, RetrievalLimits{
+		MaxPromptItems:  4,
+		MaxEpisodeItems: 4,
+	})
+	if err != nil {
+		t.Fatalf("SearchContext: %v", err)
+	}
+	for _, episode := range context.Episodes {
+		if episode.Source == "assistant" {
+			t.Fatalf("did not expect assistant episodes in historical retrieval %#v", context.Episodes)
+		}
+	}
+
 	filtered, err := store.MemoriesByTypes(ctx, []Type{Fact, Project, Decision}, 0.95, 1)
 	if err != nil || len(filtered) != 1 || filtered[0].Type != Decision {
 		t.Fatalf("unexpected filtered memories %#v err=%v", filtered, err)
