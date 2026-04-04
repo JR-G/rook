@@ -14,6 +14,9 @@ cp config/rook.example.toml config/rook.toml
 # Store Slack tokens in macOS Keychain.
 task slack-keychain-store
 
+# If Keychain is locked:
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+
 task build
 task run
 ```

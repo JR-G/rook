@@ -10,6 +10,13 @@ task test
 task lint
 ```
 
+If token storage fails with `User interaction is not allowed`, unlock the login keychain and retry:
+
+```bash
+security unlock-keychain ~/Library/Keychains/login.keychain-db
+task slack-keychain-store
+```
+
 The Slack bot exposes runtime commands in chat:
 
 - `help`
