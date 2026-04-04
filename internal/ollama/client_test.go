@@ -102,6 +102,18 @@ func TestHealth(t *testing.T) {
 	}
 }
 
+func TestJoinURLAndNew(t *testing.T) {
+	t.Parallel()
+
+	client := New("http://ollama.test", time.Second, time.Second)
+	if client == nil {
+		t.Fatal("expected client")
+	}
+	if got := joinURL("http://ollama.test/api", "/chat"); got != "http://ollama.test/api/chat" {
+		t.Fatalf("unexpected joined url %q", got)
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

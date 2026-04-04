@@ -63,6 +63,7 @@ type SlackConfig struct {
 type OllamaConfig struct {
 	Host           string   `toml:"host"`
 	ChatModel      string   `toml:"chat_model"`
+	ChatFallbacks  []string `toml:"chat_fallback_models"`
 	EmbeddingModel string   `toml:"embedding_model"`
 	Temperature    float64  `toml:"temperature"`
 	ChatTimeout    Duration `toml:"chat_timeout"`
@@ -140,9 +141,10 @@ func Default() Config {
 		},
 		Ollama: OllamaConfig{
 			Host:           "http://127.0.0.1:11434",
-			ChatModel:      "phi4-mini",
+			ChatModel:      "qwen3:4b",
+			ChatFallbacks:  []string{"phi4-mini"},
 			EmbeddingModel: "nomic-embed-text",
-			Temperature:    0.2,
+			Temperature:    0.7,
 			ChatTimeout:    Duration{Duration: 90 * time.Second},
 			EmbedTimeout:   Duration{Duration: 30 * time.Second},
 		},
@@ -197,6 +199,7 @@ func Load(path string) (Config, error) {
 	}
 
 	applyEnv(&cfg)
+	normalise(&cfg)
 	resolvePaths(&cfg, filepath.Dir(path))
 
 	if err := validate(cfg); err != nil {
@@ -221,6 +224,7 @@ func applyEnv(cfg *Config) {
 
 	overrideString(&cfg.Ollama.Host, "ROOK_OLLAMA_HOST")
 	overrideString(&cfg.Ollama.ChatModel, "ROOK_OLLAMA_CHAT_MODEL")
+	overrideCSV(&cfg.Ollama.ChatFallbacks, "ROOK_OLLAMA_CHAT_FALLBACK_MODELS")
 	overrideString(&cfg.Ollama.EmbeddingModel, "ROOK_OLLAMA_EMBEDDING_MODEL")
 
 	overrideString(&cfg.Memory.DBPath, "ROOK_MEMORY_DB_PATH")
@@ -231,6 +235,12 @@ func applyEnv(cfg *Config) {
 
 	overrideString(&cfg.Web.Provider, "ROOK_WEB_PROVIDER")
 	overrideString(&cfg.Web.Ollama.APIKey, "ROOK_WEB_OLLAMA_API_KEY")
+}
+
+func normalise(cfg *Config) {
+	cfg.Ollama.ChatModel = strings.TrimSpace(cfg.Ollama.ChatModel)
+	cfg.Ollama.EmbeddingModel = strings.TrimSpace(cfg.Ollama.EmbeddingModel)
+	cfg.Ollama.ChatFallbacks = cleanModelList(cfg.Ollama.ChatFallbacks, cfg.Ollama.ChatModel)
 }
 
 func resolvePaths(cfg *Config, baseDir string) {
@@ -253,6 +263,56 @@ func overrideString(target *string, envName string) {
 	if value, ok := os.LookupEnv(envName); ok {
 		*target = strings.TrimSpace(value)
 	}
+}
+
+func overrideCSV(target *[]string, envName string) {
+	value, ok := os.LookupEnv(envName)
+	if !ok {
+		return
+	}
+
+	*target = splitList(value)
+}
+
+func splitList(value string) []string {
+	parts := strings.Split(value, ",")
+	items := make([]string, 0, len(parts))
+	for _, part := range parts {
+		trimmed := strings.TrimSpace(part)
+		if trimmed == "" {
+			continue
+		}
+
+		items = append(items, trimmed)
+	}
+
+	return items
+}
+
+func cleanModelList(models []string, primary string) []string {
+	cleaned := make([]string, 0, len(models))
+	seen := map[string]struct{}{}
+	primary = strings.TrimSpace(primary)
+	if primary != "" {
+		seen[strings.ToLower(primary)] = struct{}{}
+	}
+
+	for _, model := range models {
+		trimmed := strings.TrimSpace(model)
+		if trimmed == "" {
+			continue
+		}
+
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+
+		seen[key] = struct{}{}
+		cleaned = append(cleaned, trimmed)
+	}
+
+	return cleaned
 }
 
 func validate(cfg Config) error {

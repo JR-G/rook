@@ -52,6 +52,18 @@ func TestFormatForPrompt(t *testing.T) {
 	}
 }
 
+func TestNoopSearcher(t *testing.T) {
+	t.Parallel()
+
+	searcher := NoopSearcher{}
+	if searcher.Enabled() || searcher.Provider() != "disabled" {
+		t.Fatalf("unexpected noop searcher state: enabled=%t provider=%q", searcher.Enabled(), searcher.Provider())
+	}
+	if _, err := searcher.Search(context.Background(), "rook", 1); err == nil {
+		t.Fatal("expected noop search to fail")
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

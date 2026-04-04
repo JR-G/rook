@@ -34,3 +34,12 @@ func TestCleanTruncatesLongOutput(t *testing.T) {
 		t.Fatalf("expected truncation suffix, got %q", got)
 	}
 }
+
+func TestCleanEmptyFallback(t *testing.T) {
+	t.Parallel()
+
+	filter := New()
+	if got := filter.Clean("   "); !strings.Contains(got, "clean reply") {
+		t.Fatalf("unexpected empty fallback %q", got)
+	}
+}

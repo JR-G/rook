@@ -57,7 +57,9 @@ func (s *Store) DueReminders(ctx context.Context, now time.Time, limit int) ([]R
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	reminders := make([]Reminder, 0, limit)
 	for rows.Next() {
@@ -126,13 +128,24 @@ func scanReminder(scanner interface{ Scan(dest ...any) error }) (Reminder, error
 	if err != nil {
 		return Reminder{}, err
 	}
-	if sentAt.Valid {
-		parsed, parseErr := time.Parse(time.RFC3339Nano, sentAt.String)
-		if parseErr != nil {
-			return Reminder{}, parseErr
-		}
-		reminder.SentAt = &parsed
+	parsedSentAt, err := parseOptionalReminderTime(sentAt)
+	if err != nil {
+		return Reminder{}, err
 	}
+	reminder.SentAt = parsedSentAt
 
 	return reminder, nil
+}
+
+func parseOptionalReminderTime(sentAt sql.NullString) (*time.Time, error) {
+	if !sentAt.Valid {
+		return nil, nil
+	}
+
+	parsed, err := time.Parse(time.RFC3339Nano, sentAt.String)
+	if err != nil {
+		return nil, err
+	}
+
+	return &parsed, nil
 }

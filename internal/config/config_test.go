@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 )
 
 func TestLoadResolvesRelativePathsAndEnvOverrides(t *testing.T) {
@@ -82,5 +83,28 @@ func TestValidateRejectsBadConcurrency(t *testing.T) {
 
 	if err := validate(cfg); err == nil {
 		t.Fatal("expected validation error")
+	}
+}
+
+func TestDurationAndLocationHelpers(t *testing.T) {
+	t.Parallel()
+
+	duration := Duration{Duration: 45 * time.Second}
+	text, err := duration.MarshalText()
+	if err != nil {
+		t.Fatalf("marshal text: %v", err)
+	}
+	if string(text) != "45s" || duration.String() != "45s" {
+		t.Fatalf("unexpected duration text %q / %q", text, duration.String())
+	}
+
+	cfg := Default()
+	cfg.Service.Timezone = "UTC"
+	location, err := cfg.Location()
+	if err != nil {
+		t.Fatalf("location: %v", err)
+	}
+	if location.String() != "UTC" {
+		t.Fatalf("unexpected location %s", location)
 	}
 }

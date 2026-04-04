@@ -6,7 +6,7 @@ Key sections:
 
 - `service`: log level, data directory, timezone
 - `slack`: app token, bot token, channel controls, DM support
-- `ollama`: host, chat model, embedding model, timeouts
+- `ollama`: host, chat model, fallback chat models, embedding model, temperature, timeouts
 - `memory`: database path, retrieval limits, consolidation interval
 - `persona`: file paths for constitution and seed identity layers
 - `web`: optional search provider settings

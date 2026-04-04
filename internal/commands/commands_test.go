@@ -70,3 +70,16 @@ func TestParseReminderRejectsPastTime(t *testing.T) {
 		t.Fatal("expected past reminder to fail")
 	}
 }
+
+func TestParseReminderRelativeDays(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 1, 10, 0, 0, 0, time.UTC)
+	request, ok, err := ParseReminder(now, time.UTC, "remind me in 2d to review")
+	if err != nil || !ok {
+		t.Fatalf("expected day reminder to parse: ok=%t err=%v", ok, err)
+	}
+	if got, want := request.DueAt, now.Add(48*time.Hour); !got.Equal(want) {
+		t.Fatalf("unexpected due time %s, want %s", got, want)
+	}
+}

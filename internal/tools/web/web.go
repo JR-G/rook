@@ -74,7 +74,7 @@ func (s *DuckDuckGoSearcher) Search(ctx context.Context, query string, maxResult
 	params.Set("q", query)
 	requestURL.RawQuery = params.Encode()
 
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), nil)
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, requestURL.String(), http.NoBody)
 	if err != nil {
 		return nil, err
 	}
@@ -84,7 +84,9 @@ func (s *DuckDuckGoSearcher) Search(ctx context.Context, query string, maxResult
 	if err != nil {
 		return nil, err
 	}
-	defer response.Body.Close()
+	defer func() {
+		_ = response.Body.Close()
+	}()
 
 	if response.StatusCode >= http.StatusBadRequest {
 		return nil, fmt.Errorf("duckduckgo returned status %d", response.StatusCode)

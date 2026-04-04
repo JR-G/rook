@@ -65,7 +65,9 @@ func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]Item, erro
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	items := make([]Item, 0, limit)
 	for rows.Next() {
@@ -80,13 +82,13 @@ func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]Item, erro
 }
 
 // MemoriesByTypes returns memories filtered by type and minimum confidence.
-func (s *Store) MemoriesByTypes(ctx context.Context, types []MemoryType, minConfidence float64, limit int) ([]Item, error) {
+func (s *Store) MemoriesByTypes(ctx context.Context, types []Type, minConfidence float64, limit int) ([]Item, error) {
 	items, err := s.loadItems(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	allowed := make(map[MemoryType]struct{}, len(types))
+	allowed := make(map[Type]struct{}, len(types))
 	for _, memoryType := range types {
 		allowed[memoryType] = struct{}{}
 	}
@@ -145,10 +147,10 @@ func scoreItems(items []Item, query string, queryEmbedding []float64, now time.T
 	return hits
 }
 
-func scoreEpisodes(episodes []Episode, query string, now time.Time) ([]EpisodeHit, []EpisodeHit) {
+func scoreEpisodes(episodes []Episode, query string, now time.Time) (generalHits, squad0Hits []EpisodeHit) {
 	queryTokens := tokenize(query)
-	general := make([]EpisodeHit, 0, len(episodes))
-	squad0 := make([]EpisodeHit, 0, len(episodes))
+	generalHits = make([]EpisodeHit, 0, len(episodes))
+	squad0Hits = make([]EpisodeHit, 0, len(episodes))
 	for _, episode := range episodes {
 		candidateTokens := mergeUnique(tokenize(episode.Summary), tokenize(episode.Text))
 		score := 0.7*keywordScore(queryTokens, candidateTokens) + 0.3*recencyScore(episode.CreatedAt, now)
@@ -158,21 +160,21 @@ func scoreEpisodes(episodes []Episode, query string, now time.Time) ([]EpisodeHi
 
 		hit := EpisodeHit{Episode: episode, Score: score}
 		if episode.Source == "squad0" {
-			squad0 = append(squad0, hit)
+			squad0Hits = append(squad0Hits, hit)
 			continue
 		}
 
-		general = append(general, hit)
+		generalHits = append(generalHits, hit)
 	}
 
-	sort.Slice(general, func(left, right int) bool {
-		return general[left].Score > general[right].Score
+	sort.Slice(generalHits, func(left, right int) bool {
+		return generalHits[left].Score > generalHits[right].Score
 	})
-	sort.Slice(squad0, func(left, right int) bool {
-		return squad0[left].Score > squad0[right].Score
+	sort.Slice(squad0Hits, func(left, right int) bool {
+		return squad0Hits[left].Score > squad0Hits[right].Score
 	})
 
-	return general, squad0
+	return generalHits, squad0Hits
 }
 
 func extractItems(hits []SearchHit) []Item {

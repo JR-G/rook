@@ -35,12 +35,23 @@ type Status struct {
 
 // Transport wraps Slack Socket Mode.
 type Transport struct {
-	api    *slack.Client
-	client *socketmode.Client
+	api    slackAPI
+	client socketClient
+	events <-chan socketmode.Event
 	logger *slog.Logger
 
 	mu     sync.RWMutex
 	status Status
+}
+
+type slackAPI interface {
+	AuthTestContext(context.Context) (*slack.AuthTestResponse, error)
+	PostMessageContext(context.Context, string, ...slack.MsgOption) (string, string, error)
+}
+
+type socketClient interface {
+	RunContext(context.Context) error
+	Ack(socketmode.Request, ...interface{})
 }
 
 // New creates a Slack transport.
@@ -51,9 +62,14 @@ func New(botToken, appToken string, logger *slog.Logger) *Transport {
 	)
 	client := socketmode.New(api)
 
+	return newTransport(api, client, client.Events, logger)
+}
+
+func newTransport(api slackAPI, client socketClient, events <-chan socketmode.Event, logger *slog.Logger) *Transport {
 	return &Transport{
 		api:    api,
 		client: client,
+		events: events,
 		logger: logger,
 	}
 }
@@ -80,7 +96,7 @@ func (t *Transport) Run(ctx context.Context, handler func(context.Context, Inbou
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case event := <-t.client.Events:
+		case event := <-t.events:
 			t.handleEvent(ctx, event, handler)
 		}
 	}
@@ -125,6 +141,22 @@ func (t *Transport) handleEvent(ctx context.Context, event socketmode.Event, han
 		})
 	case socketmode.EventTypeConnectionError:
 		t.setError(fmt.Errorf("slack connection error"))
+	case socketmode.EventTypeInvalidAuth,
+		socketmode.EventTypeIncomingError,
+		socketmode.EventTypeErrorWriteFailed,
+		socketmode.EventTypeErrorBadMessage,
+		socketmode.EventTypeDisconnect:
+		t.setError(fmt.Errorf("slack socket event: %s", event.Type))
+	case socketmode.EventTypeHello,
+		socketmode.EventTypeInteractive,
+		socketmode.EventTypeSlashCommand:
+		if event.Request != nil {
+			t.client.Ack(*event.Request)
+		}
+
+		t.updateStatus(func(status *Status) {
+			status.LastEventAt = time.Now().UTC()
+		})
 	case socketmode.EventTypeEventsAPI:
 		if event.Request != nil {
 			t.client.Ack(*event.Request)

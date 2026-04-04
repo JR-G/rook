@@ -70,8 +70,9 @@ func extractPrimaryText(input string) string {
 }
 
 func removeInternalLines(input string) string {
-	var kept []string
-	for _, line := range strings.Split(input, "\n") {
+	lines := strings.Split(input, "\n")
+	kept := make([]string, 0, len(lines))
+	for _, line := range lines {
 		trimmed := strings.TrimSpace(line)
 		if trimmed == "" {
 			kept = append(kept, "")

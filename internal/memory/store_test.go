@@ -149,6 +149,60 @@ func TestSearchContextSeparatesBuckets(t *testing.T) {
 	}
 }
 
+func TestStoreMaintenanceHelpers(t *testing.T) {
+	t.Parallel()
+
+	currentTime := time.Date(2026, time.April, 1, 10, 0, 0, 0, time.UTC)
+	store := newTestStore(t, func() time.Time { return currentTime })
+	t.Cleanup(func() { _ = store.Close() })
+	ctx := context.Background()
+
+	if _, err := store.UpsertMemory(ctx, Candidate{
+		Type:       Preference,
+		Scope:      ScopeUser,
+		Subject:    "stale item",
+		Body:       "stale item",
+		Confidence: 0.4,
+		Importance: 0.2,
+		Source:     "user",
+	}); err != nil {
+		t.Fatalf("upsert stale memory: %v", err)
+	}
+	if _, err := store.RecordEpisode(ctx, EpisodeInput{
+		ChannelID: "C1",
+		ThreadTS:  "1.0",
+		UserID:    "U1",
+		Role:      "user",
+		Source:    "user",
+		Text:      "old episode",
+	}); err != nil {
+		t.Fatalf("record episode: %v", err)
+	}
+
+	if err := store.Decay(ctx); err != nil {
+		t.Fatalf("decay: %v", err)
+	}
+	if err := store.PruneEpisodes(ctx, 1); err != nil {
+		t.Fatalf("prune episodes: %v", err)
+	}
+
+	if _, err := store.ListRecentMemories(ctx, 5); err != nil {
+		t.Fatalf("list recent memories: %v", err)
+	}
+	if _, err := store.MemoriesByTypes(ctx, []Type{Preference}, 0, 5); err != nil {
+		t.Fatalf("memories by type: %v", err)
+	}
+	if _, err := store.RecentEpisodes(ctx, 5); err != nil {
+		t.Fatalf("recent episodes: %v", err)
+	}
+	if _, err := store.PendingReminderCount(ctx); err != nil {
+		t.Fatalf("pending reminder count: %v", err)
+	}
+	if store.String() == "" {
+		t.Fatal("expected store string")
+	}
+}
+
 func newTestStore(t *testing.T, clock func() time.Time) *Store {
 	t.Helper()
 

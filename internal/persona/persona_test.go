@@ -78,3 +78,42 @@ func TestSeedSnapshotAndConsolidate(t *testing.T) {
 		t.Fatalf("expected consolidated voice to include style note: %q", snapshot.EvolvingVoice)
 	}
 }
+
+func TestRenderSystemPromptAndConsolidateIfDue(t *testing.T) {
+	t.Parallel()
+
+	tempDir := t.TempDir()
+	corePath := filepath.Join(tempDir, "core.md")
+	stablePath := filepath.Join(tempDir, "stable.md")
+	voicePath := filepath.Join(tempDir, "voice.md")
+	for path, content := range map[string]string{
+		corePath:   "core",
+		stablePath: "stable seed",
+		voicePath:  "voice seed",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write file %s: %v", path, err)
+		}
+	}
+
+	store, err := memory.OpenWithClock(filepath.Join(tempDir, "rook.sqlite"), time.Now)
+	if err != nil {
+		t.Fatalf("open store: %v", err)
+	}
+	t.Cleanup(func() { _ = store.Close() })
+
+	manager := New(store, corePath, stablePath, voicePath, 24*time.Hour, time.Now)
+	if err := manager.Seed(context.Background()); err != nil {
+		t.Fatalf("seed failed: %v", err)
+	}
+	prompt, err := manager.RenderSystemPrompt(context.Background())
+	if err != nil {
+		t.Fatalf("render prompt: %v", err)
+	}
+	if !strings.Contains(prompt, "Core constitution") {
+		t.Fatalf("unexpected prompt %q", prompt)
+	}
+	if err := manager.ConsolidateIfDue(context.Background()); err != nil {
+		t.Fatalf("consolidate if due: %v", err)
+	}
+}

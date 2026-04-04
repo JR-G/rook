@@ -122,6 +122,7 @@ func newAgentService(
 		output.New(),
 		agent.Config{
 			ChatModel:          cfg.Ollama.ChatModel,
+			ChatFallbacks:      cfg.Ollama.ChatFallbacks,
 			EmbeddingModel:     cfg.Ollama.EmbeddingModel,
 			Temperature:        cfg.Ollama.Temperature,
 			MinWriteImportance: cfg.Memory.MinWriteImportance,
@@ -172,13 +173,7 @@ func (s *Service) HandleInbound(ctx context.Context, message slacktransport.Inbo
 
 	go func() {
 		defer func() { <-s.sem }()
-		if err := s.processMessage(ctx, message); err != nil {
-			s.recordFailure(err)
-			s.logger.Error("message handling failed", "error", err)
-			if postErr := s.transport.PostMessage(context.Background(), message.ChannelID, message.ThreadTS, "I hit an internal error handling that message."); postErr != nil {
-				s.logger.Error("failed to post error reply", "error", postErr)
-			}
-		}
+		s.runMessageHandler(ctx, message)
 	}()
 }
 
@@ -204,27 +199,14 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 		return err
 	}
 
-	if reminder, ok, reminderErr := commands.ParseReminder(s.now().In(location), location, text); ok {
-		if reminderErr != nil {
-			return s.transport.PostMessage(ctx, message.ChannelID, message.ThreadTS, reminderErr.Error())
-		}
-
-		response, err := s.handleReminder(ctx, message, reminder)
-		if err != nil {
-			return err
-		}
-
-		return s.postLocalCommand(ctx, message, text, response)
+	handled, err := s.handleReminderInput(ctx, message, text, location)
+	if handled || err != nil {
+		return err
 	}
 
-	command, ok := commands.Parse(text)
-	if ok {
-		response, err := s.executeCommand(ctx, command)
-		if err != nil {
-			return err
-		}
-
-		return s.postLocalCommand(ctx, message, text, response)
+	handled, err = s.handleCommandInput(ctx, message, text)
+	if handled || err != nil {
+		return err
 	}
 
 	response, err := s.agent.Respond(ctx, agent.Request{
@@ -242,6 +224,65 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 	}
 
 	return s.transport.PostMessage(ctx, message.ChannelID, message.ThreadTS, response.Text)
+}
+
+func (s *Service) runMessageHandler(ctx context.Context, message slacktransport.InboundMessage) {
+	err := s.processMessage(ctx, message)
+	if err == nil {
+		return
+	}
+
+	s.recordFailure(err)
+	s.logger.Error("message handling failed", "error", err)
+	postErr := s.transport.PostMessage(
+		context.Background(),
+		message.ChannelID,
+		message.ThreadTS,
+		"I hit an internal error handling that message.",
+	)
+	if postErr != nil {
+		s.logger.Error("failed to post error reply", "error", postErr)
+	}
+}
+
+func (s *Service) handleReminderInput(
+	ctx context.Context,
+	message slacktransport.InboundMessage,
+	text string,
+	location *time.Location,
+) (bool, error) {
+	reminder, ok, reminderErr := commands.ParseReminder(s.now().In(location), location, text)
+	if !ok {
+		return false, nil
+	}
+	if reminderErr != nil {
+		return true, s.transport.PostMessage(ctx, message.ChannelID, message.ThreadTS, reminderErr.Error())
+	}
+
+	response, err := s.handleReminder(ctx, message, reminder)
+	if err != nil {
+		return true, err
+	}
+
+	return true, s.postLocalCommand(ctx, message, text, response)
+}
+
+func (s *Service) handleCommandInput(
+	ctx context.Context,
+	message slacktransport.InboundMessage,
+	text string,
+) (bool, error) {
+	command, ok := commands.Parse(text)
+	if !ok {
+		return false, nil
+	}
+
+	response, err := s.executeCommand(ctx, command)
+	if err != nil {
+		return true, err
+	}
+
+	return true, s.postLocalCommand(ctx, message, text, response)
 }
 
 func (s *Service) observeSquad0(ctx context.Context, message slacktransport.InboundMessage) (bool, error) {

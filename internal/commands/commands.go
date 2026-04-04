@@ -11,6 +11,7 @@ import (
 // Kind identifies a user-facing command.
 type Kind string
 
+// Built-in command kinds.
 const (
 	KindHelp   Kind = "help"
 	KindPing   Kind = "ping"
@@ -103,16 +104,16 @@ func ParseReminder(now time.Time, location *time.Location, input string) (Remind
 
 func parseRelativeDuration(input string) (time.Duration, error) {
 	normalised := strings.TrimSpace(strings.ToLower(input))
-	if strings.HasSuffix(normalised, "d") {
-		value, err := strconv.Atoi(strings.TrimSuffix(normalised, "d"))
-		if err != nil {
-			return 0, err
-		}
-
-		return time.Duration(value) * 24 * time.Hour, nil
+	if !strings.HasSuffix(normalised, "d") {
+		return time.ParseDuration(normalised)
 	}
 
-	return time.ParseDuration(normalised)
+	value, err := strconv.Atoi(strings.TrimSuffix(normalised, "d"))
+	if err != nil {
+		return 0, err
+	}
+
+	return time.Duration(value) * 24 * time.Hour, nil
 }
 
 func parseAbsoluteTime(location *time.Location, input string) (time.Time, error) {
@@ -124,20 +125,19 @@ func parseAbsoluteTime(location *time.Location, input string) (time.Time, error)
 	}
 
 	for _, layout := range layouts {
-		if layout == time.RFC3339 {
-			parsed, err := time.Parse(layout, input)
-			if err == nil {
-				return parsed, nil
-			}
-
-			continue
-		}
-
-		parsed, err := time.ParseInLocation(layout, input, location)
+		parsed, err := parseAtLayout(location, layout, input)
 		if err == nil {
 			return parsed, nil
 		}
 	}
 
 	return time.Time{}, fmt.Errorf("expected RFC3339 or YYYY-MM-DD HH:MM")
+}
+
+func parseAtLayout(location *time.Location, layout, input string) (time.Time, error) {
+	if layout == time.RFC3339 {
+		return time.Parse(layout, input)
+	}
+
+	return time.ParseInLocation(layout, input, location)
 }

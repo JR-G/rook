@@ -141,7 +141,7 @@ func (m *Manager) Consolidate(ctx context.Context) error {
 		return err
 	}
 
-	stableMemories, err := m.store.MemoriesByTypes(ctx, []memory.MemoryType{
+	stableMemories, err := m.store.MemoriesByTypes(ctx, []memory.Type{
 		memory.Preference,
 		memory.RelationshipNote,
 		memory.CommunicationStyleNote,
@@ -218,18 +218,7 @@ func buildVoice(seed string, memories []memory.Item, episodes []memory.Episode) 
 		}
 	}
 
-	if countedEpisodes > 0 {
-		averageLength := totalLength / countedEpisodes
-		if averageLength < 180 {
-			derived = append(derived, "- Default to concise first answers.")
-		}
-		if bulletSignals*2 >= countedEpisodes {
-			derived = append(derived, "- Structured lists are often welcome when choices are involved.")
-		}
-		if questionSignals*2 >= countedEpisodes {
-			derived = append(derived, "- Surface tradeoffs and next actions clearly when asked to reason through a choice.")
-		}
-	}
+	derived = appendEpisodeVoiceNotes(derived, countedEpisodes, totalLength, bulletSignals, questionSignals)
 
 	if len(derived) > 0 {
 		lines = append(lines, "## Consolidated voice notes")
@@ -237,4 +226,29 @@ func buildVoice(seed string, memories []memory.Item, episodes []memory.Episode) 
 	}
 
 	return strings.TrimSpace(strings.Join(lines, "\n"))
+}
+
+func appendEpisodeVoiceNotes(
+	derived []string,
+	countedEpisodes int,
+	totalLength int,
+	bulletSignals int,
+	questionSignals int,
+) []string {
+	if countedEpisodes == 0 {
+		return derived
+	}
+
+	averageLength := totalLength / countedEpisodes
+	if averageLength < 180 {
+		derived = append(derived, "- Default to concise first answers.")
+	}
+	if bulletSignals*2 >= countedEpisodes {
+		derived = append(derived, "- Structured lists are often welcome when choices are involved.")
+	}
+	if questionSignals*2 >= countedEpisodes {
+		derived = append(derived, "- Surface tradeoffs and next actions clearly when asked to reason through a choice.")
+	}
+
+	return derived
 }

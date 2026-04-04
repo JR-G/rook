@@ -135,6 +135,39 @@ func TestRespondWritesEpisodesAndUsesWeb(t *testing.T) {
 	}
 }
 
+func TestAgentConfigHelpers(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{
+		config: Config{
+			ChatModel:       "phi4-mini",
+			EmbeddingModel:  "nomic-embed-text",
+			WebEnabled:      true,
+			AutoOnFreshness: true,
+		},
+		searcher: web.NoopSearcher{},
+	}
+
+	service.SetChatModel("updated-model")
+	if service.ChatModel() != "updated-model" {
+		t.Fatalf("unexpected chat model %q", service.ChatModel())
+	}
+	if service.EmbeddingModel() != "nomic-embed-text" {
+		t.Fatalf("unexpected embedding model %q", service.EmbeddingModel())
+	}
+
+	service.UpdateConfig(Config{ChatModel: "next", EmbeddingModel: "embed"}, stubSearcher{})
+	if service.ChatModel() != "next" {
+		t.Fatalf("unexpected updated model %q", service.ChatModel())
+	}
+	if !service.shouldUseWeb(Config{WebEnabled: true, AutoOnFreshness: true}, "latest release") {
+		t.Fatal("expected freshness query to trigger web")
+	}
+	if renderItems(nil) != "- none" || renderEpisodes(nil) != "- none" {
+		t.Fatal("expected empty render helpers")
+	}
+}
+
 type roundTripFunc func(*http.Request) (*http.Response, error)
 
 func (fn roundTripFunc) RoundTrip(request *http.Request) (*http.Response, error) {

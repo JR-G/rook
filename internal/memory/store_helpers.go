@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-func (s *Store) lookupItem(ctx context.Context, memoryType MemoryType, scope, subject string) (Item, error) {
+func (s *Store) lookupItem(ctx context.Context, memoryType Type, scope, subject string) (Item, error) {
 	row := s.db.QueryRowContext(ctx, `
 		SELECT id, type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
@@ -41,7 +41,9 @@ func (s *Store) loadItems(ctx context.Context) ([]Item, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	items := make([]Item, 0, 128)
 	for rows.Next() {
@@ -65,7 +67,9 @@ func (s *Store) loadEpisodes(ctx context.Context, limit int) ([]Episode, error) 
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	episodes := make([]Episode, 0, limit)
 	for rows.Next() {
@@ -121,18 +125,12 @@ func scanItem(scanner interface{ Scan(dest ...any) error }) (Item, error) {
 		return Item{}, err
 	}
 
-	if keywordsJSON != "" {
-		if err := json.Unmarshal([]byte(keywordsJSON), &item.Keywords); err != nil {
-			return Item{}, err
-		}
+	if err := decodeKeywords(keywordsJSON, &item); err != nil {
+		return Item{}, err
 	}
 
-	if embeddingJSON != "" {
-		embedding, err := unmarshalFloatSlice(embeddingJSON)
-		if err != nil {
-			return Item{}, err
-		}
-		item.Embedding = embedding
+	if err := decodeEmbedding(embeddingJSON, &item); err != nil {
+		return Item{}, err
 	}
 
 	var err error
@@ -150,6 +148,29 @@ func scanItem(scanner interface{ Scan(dest ...any) error }) (Item, error) {
 	}
 
 	return item, nil
+}
+
+func decodeKeywords(keywordsJSON string, item *Item) error {
+	if keywordsJSON == "" {
+		return nil
+	}
+
+	return json.Unmarshal([]byte(keywordsJSON), &item.Keywords)
+}
+
+func decodeEmbedding(embeddingJSON string, item *Item) error {
+	if embeddingJSON == "" {
+		return nil
+	}
+
+	embedding, err := unmarshalFloatSlice(embeddingJSON)
+	if err != nil {
+		return err
+	}
+
+	item.Embedding = embedding
+
+	return nil
 }
 
 func mergeUnique(groups ...[]string) []string {

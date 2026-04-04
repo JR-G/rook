@@ -15,9 +15,10 @@ max_concurrent_handlers = 2
 
 [ollama]
 host = "http://127.0.0.1:11434"
-chat_model = "phi4-mini"
+chat_model = "qwen3:4b"
+chat_fallback_models = ["phi4-mini"]
 embedding_model = "nomic-embed-text"
-temperature = 0.2
+temperature = 0.7
 chat_timeout = "90s"
 embed_timeout = "30s"
 

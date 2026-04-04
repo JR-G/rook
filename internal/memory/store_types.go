@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// MemoryType classifies a durable memory record.
-type MemoryType string
+// Type classifies a durable memory record.
+type Type string
 
 // Memory scopes.
 const (
@@ -17,21 +17,21 @@ const (
 
 // Memory item types.
 const (
-	Fact                   MemoryType = "fact"
-	Preference             MemoryType = "preference"
-	Person                 MemoryType = "person"
-	Project                MemoryType = "project"
-	Decision               MemoryType = "decision"
-	Commitment             MemoryType = "commitment"
-	RelationshipNote       MemoryType = "relationship_note"
-	CommunicationStyleNote MemoryType = "communication_style_note"
-	OperatingPattern       MemoryType = "operating_pattern"
+	Fact                   Type = "fact"
+	Preference             Type = "preference"
+	Person                 Type = "person"
+	Project                Type = "project"
+	Decision               Type = "decision"
+	Commitment             Type = "commitment"
+	RelationshipNote       Type = "relationship_note"
+	CommunicationStyleNote Type = "communication_style_note"
+	OperatingPattern       Type = "operating_pattern"
 )
 
 // Item is a durable memory record.
 type Item struct {
 	ID         int64
-	Type       MemoryType
+	Type       Type
 	Scope      string
 	Subject    string
 	Body       string
@@ -47,7 +47,7 @@ type Item struct {
 
 // Candidate is a proposed durable memory write.
 type Candidate struct {
-	Type       MemoryType
+	Type       Type
 	Scope      string
 	Subject    string
 	Body       string

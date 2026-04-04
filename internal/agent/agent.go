@@ -16,6 +16,7 @@ import (
 // Config contains the runtime settings used by the agent loop.
 type Config struct {
 	ChatModel          string
+	ChatFallbacks      []string
 	EmbeddingModel     string
 	Temperature        float64
 	MinWriteImportance float64
@@ -40,6 +41,8 @@ type Response struct {
 	UsedWeb     bool
 	WebProvider string
 }
+
+const noContext = "- none"
 
 // Service orchestrates memory, persona, tools, and local inference.
 type Service struct {
@@ -133,12 +136,7 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		searchResults []web.Result
 		usedWeb       bool
 	)
-	if s.shouldUseWeb(cfg, request.Text) && s.searcher.Enabled() {
-		searchResults, err = s.searcher.Search(ctx, request.Text, cfg.WebMaxResults)
-		if err == nil && len(searchResults) > 0 {
-			usedWeb = true
-		}
-	}
+	searchResults, usedWeb = s.webContext(ctx, cfg, request.Text)
 
 	systemPrompt, err := s.persona.RenderSystemPrompt(ctx)
 	if err != nil {
@@ -146,10 +144,10 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 	}
 
 	userPrompt := buildUserPrompt(request.Text, retrieval, searchResults, usedWeb)
-	result, err := s.ollama.Chat(ctx, cfg.ChatModel, []ollama.Message{
+	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
-	}, cfg.Temperature)
+	})
 	if err != nil {
 		return Response{}, err
 	}
@@ -177,14 +175,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		if candidate.Importance < cfg.MinWriteImportance {
 			continue
 		}
-		if len(candidate.Embedding) == 0 {
-			embedding, embedErr := s.ollama.Embed(ctx, cfg.EmbeddingModel, candidate.Body)
-			if embedErr == nil {
-				candidate.Embedding = embedding
-			}
-		}
-		if _, upsertErr := s.store.UpsertMemory(ctx, candidate); upsertErr != nil {
-			return Response{}, upsertErr
+		if err := s.persistCandidate(ctx, cfg, candidate); err != nil {
+			return Response{}, err
 		}
 	}
 
@@ -200,6 +192,59 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		UsedWeb:     usedWeb,
 		WebProvider: s.searcher.Provider(),
 	}, nil
+}
+
+func (s *Service) persistCandidate(ctx context.Context, cfg Config, candidate memory.Candidate) error {
+	enriched := candidate
+	if len(enriched.Embedding) != 0 {
+		_, err := s.store.UpsertMemory(ctx, enriched)
+
+		return err
+	}
+
+	embedding, err := s.ollama.Embed(ctx, cfg.EmbeddingModel, enriched.Body)
+	if err == nil {
+		enriched.Embedding = embedding
+	}
+
+	_, err = s.store.UpsertMemory(ctx, enriched)
+
+	return err
+}
+
+func (s *Service) webContext(ctx context.Context, cfg Config, text string) ([]web.Result, bool) {
+	if !s.shouldUseWeb(cfg, text) || !s.searcher.Enabled() {
+		return nil, false
+	}
+
+	results, err := s.searcher.Search(ctx, text, cfg.WebMaxResults)
+	if err != nil || len(results) == 0 {
+		return nil, false
+	}
+
+	return results, true
+}
+
+func (s *Service) chatWithFallback(ctx context.Context, cfg Config, messages []ollama.Message) (ollama.ChatResult, error) {
+	models := candidateModels(cfg.ChatModel, cfg.ChatFallbacks)
+	var lastErr error
+	for _, model := range models {
+		result, err := s.ollama.Chat(ctx, model, messages, cfg.Temperature)
+		if err == nil {
+			return result, nil
+		}
+		if !ollama.ShouldFallbackModel(err) {
+			return ollama.ChatResult{}, err
+		}
+
+		lastErr = err
+	}
+
+	if lastErr != nil {
+		return ollama.ChatResult{}, lastErr
+	}
+
+	return ollama.ChatResult{}, fmt.Errorf("no chat model configured")
 }
 
 func (s *Service) snapshot() Config {
@@ -239,6 +284,36 @@ func (s *Service) shouldUseWeb(cfg Config, text string) bool {
 	return cfg.AutoOnFreshness && strings.Contains(lowerText, "update")
 }
 
+func candidateModels(primary string, fallbacks []string) []string {
+	trimmedPrimary := strings.TrimSpace(primary)
+	if trimmedPrimary == "" {
+		return nil
+	}
+
+	models := make([]string, 0, len(fallbacks)+1)
+	models = append(models, trimmedPrimary)
+	seen := map[string]struct{}{
+		strings.ToLower(trimmedPrimary): {},
+	}
+
+	for _, fallback := range fallbacks {
+		trimmed := strings.TrimSpace(fallback)
+		if trimmed == "" {
+			continue
+		}
+
+		key := strings.ToLower(trimmed)
+		if _, ok := seen[key]; ok {
+			continue
+		}
+
+		seen[key] = struct{}{}
+		models = append(models, trimmed)
+	}
+
+	return models
+}
+
 func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResults []web.Result, usedWeb bool) string {
 	var builder strings.Builder
 	builder.WriteString("User request:\n")
@@ -273,10 +348,10 @@ func renderMemoryContext(retrieval memory.RetrievalContext) string {
 
 func renderItems(items []memory.Item) string {
 	if len(items) == 0 {
-		return "- none"
+		return noContext
 	}
 
-	var lines []string
+	lines := make([]string, 0, len(items))
 	for _, item := range items {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", item.Type, item.Body))
 	}
@@ -286,10 +361,10 @@ func renderItems(items []memory.Item) string {
 
 func renderEpisodes(episodes []memory.Episode) string {
 	if len(episodes) == 0 {
-		return "- none"
+		return noContext
 	}
 
-	var lines []string
+	lines := make([]string, 0, len(episodes))
 	for _, episode := range episodes {
 		lines = append(lines, fmt.Sprintf("- [%s] %s", episode.Source, episode.Summary))
 	}

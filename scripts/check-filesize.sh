@@ -13,6 +13,7 @@ while IFS= read -r path; do
   fi
 done < <(find . -type f \
   ! -path './.git/*' \
+  ! -path './.cache/*' \
   ! -path './bin/*' \
   ! -path './data/*')
 

@@ -102,6 +102,28 @@ func (f *fakeTransport) Status() slacktransport.Status {
 	return f.status
 }
 
+func requireFakeTransport(t *testing.T, service *Service) *fakeTransport {
+	t.Helper()
+
+	transport, ok := service.transport.(*fakeTransport)
+	if !ok {
+		t.Fatalf("expected fake transport, got %T", service.transport)
+	}
+
+	return transport
+}
+
+func requireFakeAgent(t *testing.T, service *Service) *fakeAgent {
+	t.Helper()
+
+	fake, ok := service.agent.(*fakeAgent)
+	if !ok {
+		t.Fatalf("expected fake agent, got %T", service.agent)
+	}
+
+	return fake
+}
+
 func TestProcessMessageCommandAndMemory(t *testing.T) {
 	t.Parallel()
 
@@ -128,7 +150,7 @@ func TestProcessMessageCommandAndMemory(t *testing.T) {
 		t.Fatalf("process message: %v", err)
 	}
 
-	transport := service.transport.(*fakeTransport)
+	transport := requireFakeTransport(t, service)
 	if len(transport.postedTexts) != 1 {
 		t.Fatalf("expected one post, got %d", len(transport.postedTexts))
 	}
@@ -141,7 +163,7 @@ func TestProcessMessageGeneralConversation(t *testing.T) {
 	t.Parallel()
 
 	service := newTestService(t)
-	fake := service.agent.(*fakeAgent)
+	fake := requireFakeAgent(t, service)
 	fake.respondFn = func(_ context.Context, request agent.Request) (agent.Response, error) {
 		if request.Text != "hello" {
 			t.Fatalf("unexpected request text %q", request.Text)
@@ -160,7 +182,7 @@ func TestProcessMessageGeneralConversation(t *testing.T) {
 		t.Fatalf("process message: %v", err)
 	}
 
-	transport := service.transport.(*fakeTransport)
+	transport := requireFakeTransport(t, service)
 	if len(transport.postedTexts) != 1 || transport.postedTexts[0] != "reply" {
 		t.Fatalf("unexpected posts %#v", transport.postedTexts)
 	}
@@ -182,7 +204,7 @@ func TestProcessMessageReminderAndDispatch(t *testing.T) {
 		t.Fatalf("process reminder: %v", err)
 	}
 
-	transport := service.transport.(*fakeTransport)
+	transport := requireFakeTransport(t, service)
 	if len(transport.postedTexts) != 1 || !strings.Contains(transport.postedTexts[0], "Reminder set") {
 		t.Fatalf("unexpected reminder set output %#v", transport.postedTexts)
 	}
@@ -221,7 +243,8 @@ func TestProcessMessageObservesSquad0WithoutReply(t *testing.T) {
 	if len(episodes) != 1 || episodes[0].Source != "squad0" {
 		t.Fatalf("unexpected observed episodes %#v", episodes)
 	}
-	if len(service.transport.(*fakeTransport).postedTexts) != 0 {
+	transport := requireFakeTransport(t, service)
+	if len(transport.postedTexts) != 0 {
 		t.Fatal("expected no Slack reply for passive observation")
 	}
 }
@@ -230,7 +253,7 @@ func TestHandleInboundAndRun(t *testing.T) {
 	t.Parallel()
 
 	service := newTestService(t)
-	transport := service.transport.(*fakeTransport)
+	transport := requireFakeTransport(t, service)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -296,7 +319,8 @@ func TestNormaliseTextAndHandleInboundCapacity(t *testing.T) {
 	t.Parallel()
 
 	service := newTestService(t)
-	service.transport.(*fakeTransport).status = slacktransport.Status{BotUserID: "UROOK"}
+	transport := requireFakeTransport(t, service)
+	transport.status = slacktransport.Status{BotUserID: "UROOK"}
 	if got := service.normaliseText("<@UROOK> hello"); got != "hello" {
 		t.Fatalf("unexpected normalised text %q", got)
 	}

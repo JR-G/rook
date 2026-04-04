@@ -108,6 +108,7 @@ func (s *Service) statusText(ctx context.Context) (string, error) {
 	builder.WriteString(fmt.Sprintf("slack last event: %s\n", formatTime(slackStatus.LastEventAt)))
 	builder.WriteString(fmt.Sprintf("ollama reachable: %t\n", ollamaErr == nil && ollamaHealth.Reachable))
 	builder.WriteString(fmt.Sprintf("chat model: %s\n", s.agent.ChatModel()))
+	builder.WriteString(fmt.Sprintf("chat fallbacks: %s\n", formatFallbackModels(s.currentConfig().Ollama.ChatFallbacks)))
 	builder.WriteString(fmt.Sprintf("embedding model: %s\n", s.agent.EmbeddingModel()))
 	builder.WriteString(fmt.Sprintf("memory db healthy: %t\n", storeErr == nil && storeHealth.Reachable))
 	if storeErr == nil {
@@ -125,23 +126,31 @@ func (s *Service) statusText(ctx context.Context) (string, error) {
 
 func (s *Service) memoryText(ctx context.Context, query string) (string, error) {
 	if query == "" {
-		items, err := s.store.ListRecentMemories(ctx, 6)
-		if err != nil {
-			return "", err
-		}
-		if len(items) == 0 {
-			return "No durable memory stored yet.", nil
-		}
-
-		var lines []string
-		lines = append(lines, "Recent durable memory:")
-		for _, item := range items {
-			lines = append(lines, fmt.Sprintf("- [%s] %s", item.Type, item.Body))
-		}
-
-		return strings.Join(lines, "\n"), nil
+		return s.recentMemoryText(ctx)
 	}
 
+	return s.searchMemoryText(ctx, query)
+}
+
+func (s *Service) recentMemoryText(ctx context.Context) (string, error) {
+	items, err := s.store.ListRecentMemories(ctx, 6)
+	if err != nil {
+		return "", err
+	}
+	if len(items) == 0 {
+		return "No durable memory stored yet.", nil
+	}
+
+	lines := make([]string, 0, len(items)+1)
+	lines = append(lines, "Recent durable memory:")
+	for _, item := range items {
+		lines = append(lines, fmt.Sprintf("- [%s] %s", item.Type, item.Body))
+	}
+
+	return strings.Join(lines, "\n"), nil
+}
+
+func (s *Service) searchMemoryText(ctx context.Context, query string) (string, error) {
 	queryEmbedding, _ := s.ollama.Embed(ctx, s.agent.EmbeddingModel(), query)
 	hits, err := s.store.SearchMemories(ctx, query, queryEmbedding, 6)
 	if err != nil {
@@ -151,7 +160,7 @@ func (s *Service) memoryText(ctx context.Context, query string) (string, error) 
 		return "No matching memory found.", nil
 	}
 
-	var lines []string
+	lines := make([]string, 0, len(hits)+1)
 	lines = append(lines, "Matching memory:")
 	for _, hit := range hits {
 		lines = append(lines, fmt.Sprintf("- [%s] %.2f %s", hit.Item.Type, hit.Score, hit.Item.Body))
@@ -163,8 +172,9 @@ func (s *Service) memoryText(ctx context.Context, query string) (string, error) 
 func (s *Service) modelText(args string) string {
 	if args == "" {
 		return fmt.Sprintf(
-			"chat model: %s\nembedding model: %s",
+			"chat model: %s\nchat fallbacks: %s\nembedding model: %s",
 			s.agent.ChatModel(),
+			formatFallbackModels(s.currentConfig().Ollama.ChatFallbacks),
 			s.agent.EmbeddingModel(),
 		)
 	}
@@ -195,6 +205,7 @@ func (s *Service) reload() string {
 
 	s.agent.UpdateConfig(agent.Config{
 		ChatModel:          cfg.Ollama.ChatModel,
+		ChatFallbacks:      cfg.Ollama.ChatFallbacks,
 		EmbeddingModel:     cfg.Ollama.EmbeddingModel,
 		Temperature:        cfg.Ollama.Temperature,
 		MinWriteImportance: cfg.Memory.MinWriteImportance,
@@ -220,4 +231,12 @@ func helpText() string {
 		"- remind me in 30m to stretch",
 		"- remind me at 2026-04-01 18:00 to call someone",
 	}, "\n")
+}
+
+func formatFallbackModels(models []string) string {
+	if len(models) == 0 {
+		return "none"
+	}
+
+	return strings.Join(models, ", ")
 }

@@ -44,6 +44,12 @@ task launchd-install
 - Embedding model: `nomic-embed-text`
 - Web provider: disabled by default, optional `duckduckgo`
 
+The default model choice is deliberate: `phi4-mini` is small enough for an 8 GB Mac mini, but it should be treated as a retrieval-augmented local assistant rather than a model with deep factual storage on its own. `rook` therefore separates:
+
+- local model reasoning
+- local memory retrieval
+- optional live web retrieval when freshness matters
+
 ## Docs
 
 - [Architecture](docs/architecture.md)
