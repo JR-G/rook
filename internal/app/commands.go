@@ -14,6 +14,8 @@ import (
 	slacktransport "github.com/JR-G/rook/internal/slack"
 )
 
+const noFallbackModels = "none"
+
 func (s *Service) executeCommand(ctx context.Context, command commands.Command) (string, error) {
 	switch command.Kind {
 	case commands.KindHelp:
@@ -235,7 +237,7 @@ func helpText() string {
 
 func formatFallbackModels(models []string) string {
 	if len(models) == 0 {
-		return "none"
+		return noFallbackModels
 	}
 
 	return strings.Join(models, ", ")

@@ -60,7 +60,7 @@ func TestRespondWritesEpisodesAndUsesWeb(t *testing.T) {
 		ollama.NewWithHTTPClient("http://ollama.test", time.Second, time.Second, &http.Client{
 			Transport: roundTripFunc(func(r *http.Request) (*http.Response, error) {
 				switch r.URL.Path {
-				case "/api/chat":
+				case testAgentChatEndpoint:
 					body, _ := json.Marshal(map[string]any{
 						"model": "phi4-mini",
 						"message": map[string]any{
@@ -72,7 +72,7 @@ func TestRespondWritesEpisodesAndUsesWeb(t *testing.T) {
 						Body:       io.NopCloser(strings.NewReader(string(body))),
 						Header:     make(http.Header),
 					}, nil
-				case "/api/embed":
+				case testAgentEmbedEndpoint:
 					body, _ := json.Marshal(map[string]any{
 						"embeddings": [][]float64{{1, 0}},
 					})

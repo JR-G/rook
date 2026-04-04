@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"io"
 	"os"
 	"os/signal"
 	"syscall"
@@ -13,10 +14,15 @@ import (
 	"github.com/JR-G/rook/internal/logging"
 )
 
+var (
+	stderr io.Writer = os.Stderr
+	exitFn           = os.Exit
+)
+
 func main() {
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		_, _ = fmt.Fprintln(stderr, err)
+		exitFn(1)
 	}
 }
 

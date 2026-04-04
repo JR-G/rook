@@ -7,8 +7,6 @@ import (
 )
 
 func TestRunRejectsUnsupportedCommand(t *testing.T) {
-	t.Parallel()
-
 	tempDir := t.TempDir()
 	configPath := filepath.Join(tempDir, "rook.toml")
 	for path, content := range map[string]string{
