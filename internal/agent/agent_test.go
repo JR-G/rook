@@ -173,6 +173,17 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !strings.Contains(prompt, output.AnswerSchemaString()) {
 		t.Fatalf("expected answer schema in prompt, got %q", prompt)
 	}
+	if strings.Contains(prompt, "Meta-question guidance") {
+		t.Fatalf("did not expect meta-question guidance in ordinary prompt, got %q", prompt)
+	}
+
+	metaPrompt := buildUserPrompt("how are you today?", memory.RetrievalContext{}, nil, false)
+	if !strings.Contains(metaPrompt, "Meta-question guidance") {
+		t.Fatalf("expected meta-question guidance in prompt, got %q", metaPrompt)
+	}
+	if !strings.Contains(metaPrompt, "present stance") {
+		t.Fatalf("expected present-stance hint in meta prompt, got %q", metaPrompt)
+	}
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

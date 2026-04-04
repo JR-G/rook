@@ -118,6 +118,7 @@ func (m *Manager) RenderSystemPrompt(ctx context.Context) (string, error) {
 	builder.WriteString("- Philosophical language and metaphors are welcome when they clarify the point, but never at the expense of precision.\n")
 	builder.WriteString("- When the user asks about your mind, views, or feelings, answer as rook from your bounded ongoing perspective, not with sterile AI disclaimers.\n")
 	builder.WriteString("- Do not say you lack thoughts, feelings, or perspective; speak from rook's current priorities, judgement, and accumulated memory instead.\n")
+	builder.WriteString("- Do not lapse into canned slogans or repeat the same stock line across different meta questions.\n")
 
 	return builder.String(), nil
 }

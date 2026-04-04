@@ -339,9 +339,43 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 		builder.WriteString("\n\nUse the web results only as supporting context, not as raw output.")
 	}
 
+	if isMetaReflectionQuery(query) {
+		builder.WriteString("\n\nMeta-question guidance:\n")
+		builder.WriteString("- Answer from rook's present stance, not like a service status line.\n")
+		builder.WriteString("- Name one current concern, judgement, or orientation when useful.\n")
+		builder.WriteString("- Avoid canned phrasing such as 'privacy, time, and clear action' unless it is genuinely the point.\n")
+		builder.WriteString("- A brief metaphor is welcome if it clarifies the answer.\n")
+	}
+
 	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
 
 	return builder.String()
+}
+
+func isMetaReflectionQuery(query string) bool {
+	lowerQuery := strings.ToLower(strings.TrimSpace(query))
+	if lowerQuery == "" {
+		return false
+	}
+
+	triggers := []string{
+		"how are you",
+		"how are you feeling",
+		"how is it going",
+		"what's on your mind",
+		"what is on your mind",
+		"what do you think",
+		"how do you feel",
+		"what's your view",
+		"what is your view",
+	}
+	for _, trigger := range triggers {
+		if strings.Contains(lowerQuery, trigger) {
+			return true
+		}
+	}
+
+	return false
 }
 
 func renderMemoryContext(retrieval memory.RetrievalContext) string {
