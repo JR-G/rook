@@ -119,6 +119,9 @@ func TestRenderSystemPromptAndConsolidateIfDue(t *testing.T) {
 	if !strings.Contains(prompt, "structured response") {
 		t.Fatalf("persona prompt should describe structured output handling: %q", prompt)
 	}
+	if !strings.Contains(prompt, "distinct personality come through in every answer") {
+		t.Fatalf("persona prompt should require voice in all answers: %q", prompt)
+	}
 	if !strings.Contains(prompt, "canned slogans") {
 		t.Fatalf("persona prompt should discourage canned slogans: %q", prompt)
 	}

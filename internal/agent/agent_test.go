@@ -166,18 +166,21 @@ func TestAgentConfigHelpers(t *testing.T) {
 		t.Fatal("expected empty render helpers")
 	}
 
-	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, false)
+	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, nil, false)
 	if !strings.Contains(prompt, "Internal context below is for reasoning only.") {
 		t.Fatalf("expected internal-context prompt guard, got %q", prompt)
 	}
 	if !strings.Contains(prompt, output.AnswerSchemaString()) {
 		t.Fatalf("expected answer schema in prompt, got %q", prompt)
 	}
+	if !strings.Contains(prompt, "Let rook's personality come through even in practical answers.") {
+		t.Fatalf("expected general voice guidance in prompt, got %q", prompt)
+	}
 	if strings.Contains(prompt, "Meta-question guidance") {
 		t.Fatalf("did not expect meta-question guidance in ordinary prompt, got %q", prompt)
 	}
 
-	metaPrompt := buildUserPrompt("how are you today?", memory.RetrievalContext{}, nil, false)
+	metaPrompt := buildUserPrompt("how are you today?", memory.RetrievalContext{}, nil, nil, false)
 	if !strings.Contains(metaPrompt, "Meta-question guidance") {
 		t.Fatalf("expected meta-question guidance in prompt, got %q", metaPrompt)
 	}
@@ -186,14 +189,58 @@ func TestAgentConfigHelpers(t *testing.T) {
 	}
 
 	retrieval := memory.RetrievalContext{
-		Episodes: []memory.Episode{{Source: "assistant", Summary: "I'm focused on your priorities: privacy, time, and clear action."}},
+		Episodes: []memory.Episode{
+			{ChannelID: "C1", ThreadTS: "1.0", Source: "assistant", Summary: "Current thread reply"},
+			{ChannelID: "C2", ThreadTS: "2.0", Source: "assistant", Summary: "Older historical reply"},
+		},
 	}
-	adjusted := adjustRetrievalForQuery("how are you today?", retrieval)
+	adjusted := adjustRetrievalForQuery("how are you today?", "C1", "1.0", retrieval)
 	if len(adjusted.Episodes) != 0 {
 		t.Fatalf("expected meta-query retrieval to drop historical episodes, got %#v", adjusted.Episodes)
 	}
-	if len(adjustRetrievalForQuery("what changed?", retrieval).Episodes) != 1 {
-		t.Fatal("did not expect ordinary query retrieval to drop episodes")
+	ordinary := adjustRetrievalForQuery("what changed?", "C1", "1.0", retrieval)
+	if len(ordinary.Episodes) != 1 || ordinary.Episodes[0].ChannelID != "C2" {
+		t.Fatalf("unexpected ordinary-query retrieval %#v", ordinary.Episodes)
+	}
+
+	threadPrompt := buildUserPrompt(
+		"oh really?",
+		memory.RetrievalContext{},
+		[]memory.Episode{
+			{Source: "user", Summary: "how are you today?"},
+			{Source: "assistant", Summary: "Steady. I'm focused on keeping your week legible."},
+		},
+		nil,
+		false,
+	)
+	if !strings.Contains(threadPrompt, "Current thread:") {
+		t.Fatalf("expected thread context in prompt, got %q", threadPrompt)
+	}
+	if !strings.Contains(threadPrompt, "Continue the live thread naturally") {
+		t.Fatalf("expected continuation guidance in prompt, got %q", threadPrompt)
+	}
+	if !strings.Contains(threadPrompt, "short follow-up") {
+		t.Fatalf("expected anti-repetition guidance in prompt, got %q", threadPrompt)
+	}
+	if !strings.Contains(threadPrompt, "[assistant] Steady. I'm focused on keeping your week legible.") {
+		t.Fatalf("expected thread prompt to use episode text, got %q", threadPrompt)
+	}
+
+	trimmed := trimCurrentUserEcho("oh really?", []memory.Episode{
+		{Source: "assistant", Text: "Steady."},
+		{Source: "user", Text: "oh really?"},
+	})
+	if len(trimmed) != 1 || trimmed[0].Source != "assistant" {
+		t.Fatalf("unexpected trimmed thread context %#v", trimmed)
+	}
+	if kept := trimCurrentUserEcho("oh really?", []memory.Episode{{Source: "assistant", Text: "Steady."}}); len(kept) != 1 {
+		t.Fatalf("expected unmatched thread context to be kept, got %#v", kept)
+	}
+	if kept := excludeThreadEpisodes(nil, "C1", "1.0"); kept != nil {
+		t.Fatalf("expected nil episode slice to stay nil, got %#v", kept)
+	}
+	if rendered := renderThreadEpisodes(nil); rendered != noContext {
+		t.Fatalf("expected empty thread render to use noContext, got %q", rendered)
 	}
 }
 

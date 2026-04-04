@@ -64,6 +64,9 @@ func TestRenderSnapshotAndConsolidateFromEvidence(t *testing.T) {
 	if !strings.Contains(prompt, "structured response") {
 		t.Fatalf("prompt should describe structured runtime handling: %q", prompt)
 	}
+	if !strings.Contains(prompt, "distinct personality come through in every answer") {
+		t.Fatalf("prompt should require voice in all answers: %q", prompt)
+	}
 	if !strings.Contains(prompt, "canned slogans") {
 		t.Fatalf("prompt should discourage canned slogans: %q", prompt)
 	}

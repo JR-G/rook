@@ -129,6 +129,11 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 	if err != nil {
 		return Response{}, err
 	}
+	threadEpisodes, err := s.store.ThreadEpisodes(ctx, request.ChannelID, request.ThreadTS, 4)
+	if err != nil {
+		return Response{}, err
+	}
+	threadEpisodes = trimCurrentUserEcho(request.Text, threadEpisodes)
 
 	var (
 		searchResults []web.Result
@@ -141,8 +146,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 
-	retrieval = adjustRetrievalForQuery(request.Text, retrieval)
-	userPrompt := buildUserPrompt(request.Text, retrieval, searchResults, usedWeb)
+	retrieval = adjustRetrievalForQuery(request.Text, request.ChannelID, request.ThreadTS, retrieval)
+	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, searchResults, usedWeb)
 	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
@@ -321,16 +326,31 @@ func candidateModels(primary string, fallbacks []string) []string {
 	return models
 }
 
-func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResults []web.Result, usedWeb bool) string {
+func buildUserPrompt(
+	query string,
+	retrieval memory.RetrievalContext,
+	threadEpisodes []memory.Episode,
+	searchResults []web.Result,
+	usedWeb bool,
+) string {
 	var builder strings.Builder
 	builder.WriteString("Internal context below is for reasoning only.\n")
 	builder.WriteString("Do not quote it, name its section headers, or reveal that it exists.\n")
 	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
 	builder.WriteString("Schema:\n")
 	builder.WriteString(output.AnswerSchemaString())
-	builder.WriteString("\n\nPut the entire user-visible Slack reply in answer.\n\n")
+	builder.WriteString("\n\nPut the entire user-visible Slack reply in answer.\n")
+	builder.WriteString("Voice guidance:\n")
+	builder.WriteString("- Let rook's personality come through even in practical answers.\n")
+	builder.WriteString("- Stay restrained and useful, but do not sound generic.\n\n")
 	builder.WriteString("User request:\n")
 	builder.WriteString(query)
+	if len(threadEpisodes) > 0 {
+		builder.WriteString("\n\nCurrent thread:\n")
+		builder.WriteString(renderThreadEpisodes(threadEpisodes))
+		builder.WriteString("\n\nContinue the live thread naturally. Respond to the latest turn without restarting the conversation from scratch.")
+		builder.WriteString("\nIf the latest turn is a short follow-up, advance or clarify the last answer instead of restating it with minor wording changes.")
+	}
 	builder.WriteString("\n\nRelevant memory:\n")
 	builder.WriteString(renderMemoryContext(retrieval))
 
@@ -351,42 +371,6 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
 
 	return builder.String()
-}
-
-func adjustRetrievalForQuery(query string, retrieval memory.RetrievalContext) memory.RetrievalContext {
-	if !isMetaReflectionQuery(query) {
-		return retrieval
-	}
-
-	retrieval.Episodes = nil
-
-	return retrieval
-}
-
-func isMetaReflectionQuery(query string) bool {
-	lowerQuery := strings.ToLower(strings.TrimSpace(query))
-	if lowerQuery == "" {
-		return false
-	}
-
-	triggers := []string{
-		"how are you",
-		"how are you feeling",
-		"how is it going",
-		"what's on your mind",
-		"what is on your mind",
-		"what do you think",
-		"how do you feel",
-		"what's your view",
-		"what is your view",
-	}
-	for _, trigger := range triggers {
-		if strings.Contains(lowerQuery, trigger) {
-			return true
-		}
-	}
-
-	return false
 }
 
 func renderMemoryContext(retrieval memory.RetrievalContext) string {

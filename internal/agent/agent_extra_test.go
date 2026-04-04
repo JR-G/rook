@@ -153,7 +153,7 @@ func TestChatFallbackAndWebHelpers(t *testing.T) {
 		t.Fatal("did not expect disabled web config to use web")
 	}
 
-	prompt := buildUserPrompt("what changed?", memory.RetrievalContext{}, []web.Result{{Title: "A", URL: "https://example.com"}}, true)
+	prompt := buildUserPrompt("what changed?", memory.RetrievalContext{}, nil, []web.Result{{Title: "A", URL: "https://example.com"}}, true)
 	if !strings.Contains(prompt, "Live web results") {
 		t.Fatalf("unexpected user prompt %q", prompt)
 	}

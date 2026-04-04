@@ -121,6 +121,63 @@ func (s *Store) RecentEpisodes(ctx context.Context, limit int) ([]Episode, error
 	return s.loadEpisodes(ctx, limit)
 }
 
+// ThreadEpisodes returns the most recent episodes in one thread in chronological order.
+func (s *Store) ThreadEpisodes(ctx context.Context, channelID, threadTS string, limit int) ([]Episode, error) {
+	if limit <= 0 {
+		return nil, nil
+	}
+
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT id, channel_id, thread_ts, user_id, role, source, text, summary, created_at
+		FROM episodes
+		WHERE channel_id = ?
+		  AND thread_ts = ?
+		ORDER BY created_at DESC, id DESC
+		LIMIT ?
+	`, channelID, threadTS, limit)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	episodes := make([]Episode, 0, limit)
+	for rows.Next() {
+		var episode Episode
+		var createdAt string
+		if err := rows.Scan(
+			&episode.ID,
+			&episode.ChannelID,
+			&episode.ThreadTS,
+			&episode.UserID,
+			&episode.Role,
+			&episode.Source,
+			&episode.Text,
+			&episode.Summary,
+			&createdAt,
+		); err != nil {
+			return nil, err
+		}
+
+		parsed, err := time.Parse(time.RFC3339Nano, createdAt)
+		if err != nil {
+			return nil, err
+		}
+		episode.CreatedAt = parsed
+		episodes = append(episodes, episode)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	for left, right := 0, len(episodes)-1; left < right; left, right = left+1, right-1 {
+		episodes[left], episodes[right] = episodes[right], episodes[left]
+	}
+
+	return episodes, nil
+}
+
 // HasAssistantReplyInThread reports whether rook has already replied in a thread.
 func (s *Store) HasAssistantReplyInThread(ctx context.Context, channelID, threadTS string) (bool, error) {
 	var count int

@@ -130,6 +130,24 @@ func TestSearchContextAndReminderBranches(t *testing.T) {
 	if hasReply, err := store.HasAssistantReplyInThread(ctx, "C1", "2.0"); err != nil || hasReply {
 		t.Fatalf("unexpected assistant thread state for other thread: %t err=%v", hasReply, err)
 	}
+	threadEpisodes, err := store.ThreadEpisodes(ctx, "C1", "1.0", 5)
+	if err != nil {
+		t.Fatalf("thread episodes: %v", err)
+	}
+	if len(threadEpisodes) != 3 {
+		t.Fatalf("unexpected thread episode count %#v", threadEpisodes)
+	}
+	if threadEpisodes[0].Source != "user" || threadEpisodes[2].Source != "assistant" {
+		t.Fatalf("expected chronological thread episodes %#v", threadEpisodes)
+	}
+	emptyThreadEpisodes, err := store.ThreadEpisodes(ctx, "C1", "9.0", 5)
+	if err != nil || len(emptyThreadEpisodes) != 0 {
+		t.Fatalf("unexpected empty thread episodes %#v err=%v", emptyThreadEpisodes, err)
+	}
+	zeroLimitThreadEpisodes, err := store.ThreadEpisodes(ctx, "C1", "1.0", 0)
+	if err != nil || zeroLimitThreadEpisodes != nil {
+		t.Fatalf("unexpected zero-limit thread episodes %#v err=%v", zeroLimitThreadEpisodes, err)
+	}
 
 	filtered, err := store.MemoriesByTypes(ctx, []Type{Fact, Project, Decision}, 0.95, 1)
 	if err != nil || len(filtered) != 1 || filtered[0].Type != Decision {
