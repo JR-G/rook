@@ -41,6 +41,17 @@ func TestHandleEventStatusVariants(t *testing.T) {
 		t.Fatal("expected connected event to set status")
 	}
 
+	transport.handleEvent(context.Background(), socketmode.Event{
+		Type: socketmode.EventTypeHello,
+		Request: &socketmode.Request{
+			NumConnections: 1,
+			ConnectionInfo: socketmode.ConnectionInfo{AppID: "AROOKIE"},
+		},
+	}, handler)
+	if socket.acked != 0 {
+		t.Fatal("did not expect hello event to be acked")
+	}
+
 	errorEvents := []socketmode.EventType{
 		socketmode.EventTypeConnectionError,
 		socketmode.EventTypeInvalidAuth,
@@ -58,7 +69,6 @@ func TestHandleEventStatusVariants(t *testing.T) {
 
 	request := socketmode.Request{}
 	ackEvents := []socketmode.EventType{
-		socketmode.EventTypeHello,
 		socketmode.EventTypeInteractive,
 		socketmode.EventTypeSlashCommand,
 	}
@@ -131,4 +141,19 @@ func TestHandleEventsAPIBranches(t *testing.T) {
 	default:
 		t.Fatal("expected direct message event to be handled")
 	}
+
+	transport.handleEventsAPI(context.Background(), slackevents.EventsAPIEvent{
+		InnerEvent: slackevents.EventsAPIInnerEvent{
+			Data: &slackevents.MessageEvent{
+				Channel:         "C1",
+				ChannelType:     "channel",
+				ThreadTimeStamp: "2.0",
+				TimeStamp:       "2.1",
+				User:            "U2",
+				Text:            "<@UROOK> ping",
+			},
+		},
+	}, func(context.Context, InboundMessage) {
+		t.Fatal("did not expect mentioned channel message event to be handled")
+	})
 }

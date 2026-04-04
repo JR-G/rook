@@ -151,6 +151,15 @@ func (s *Service) Close() error {
 
 // Run starts the reminder loop and Slack transport.
 func (s *Service) Run(ctx context.Context) error {
+	s.logger.Info(
+		"rook service starting",
+		"chat_model",
+		s.currentConfig().Ollama.ChatModel,
+		"embedding_model",
+		s.currentConfig().Ollama.EmbeddingModel,
+		"web_enabled",
+		s.currentConfig().Web.Enabled,
+	)
 	go s.runReminderLoop(ctx)
 
 	err := s.transport.Run(ctx, s.HandleInbound)
@@ -171,6 +180,21 @@ func (s *Service) HandleInbound(ctx context.Context, message slacktransport.Inbo
 		return
 	}
 
+	s.logger.Info(
+		"accepted inbound slack message",
+		"channel_id",
+		message.ChannelID,
+		"user_id",
+		message.UserID,
+		"bot_id",
+		message.BotID,
+		"thread_ts",
+		message.ThreadTS,
+		"is_dm",
+		message.IsDM,
+		"mentioned",
+		message.Mentioned,
+	)
 	go func() {
 		defer func() { <-s.sem }()
 		s.runMessageHandler(ctx, message)
@@ -183,14 +207,25 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 		return err
 	}
 	if observed && !s.shouldRespond(message) {
+		s.logger.Info("observed squad0 message without reply", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 		return nil
 	}
 	if !s.shouldRespond(message) {
+		s.logger.Info(
+			"ignoring slack message due to routing rules",
+			"channel_id",
+			message.ChannelID,
+			"is_dm",
+			message.IsDM,
+			"mentioned",
+			message.Mentioned,
+		)
 		return nil
 	}
 
 	text := s.normaliseText(message.Text)
 	if text == "" {
+		s.logger.Info("ignoring slack message after normalisation", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 		return nil
 	}
 
@@ -200,15 +235,24 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 	}
 
 	handled, err := s.handleReminderInput(ctx, message, text, location)
-	if handled || err != nil {
+	if err != nil {
 		return err
+	}
+	if handled {
+		s.logger.Info("handled reminder input", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
+		return nil
 	}
 
 	handled, err = s.handleCommandInput(ctx, message, text)
-	if handled || err != nil {
+	if err != nil {
 		return err
 	}
+	if handled {
+		s.logger.Info("handled command input", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
+		return nil
+	}
 
+	s.logger.Info("dispatching message to agent", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 	response, err := s.agent.Respond(ctx, agent.Request{
 		ChannelID: message.ChannelID,
 		ThreadTS:  message.ThreadTS,
@@ -223,6 +267,7 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 		return err
 	}
 
+	s.logger.Info("posting agent response to slack", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 	return s.transport.PostMessage(ctx, message.ChannelID, message.ThreadTS, response.Text)
 }
 
