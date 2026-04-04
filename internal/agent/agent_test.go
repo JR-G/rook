@@ -184,8 +184,8 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !strings.Contains(metaPrompt, "Meta-question guidance") {
 		t.Fatalf("expected meta-question guidance in prompt, got %q", metaPrompt)
 	}
-	if !strings.Contains(metaPrompt, "present stance") {
-		t.Fatalf("expected present-stance hint in meta prompt, got %q", metaPrompt)
+	if !strings.Contains(metaPrompt, "rook's own perspective") {
+		t.Fatalf("expected rook-perspective hint in meta prompt, got %q", metaPrompt)
 	}
 
 	retrieval := memory.RetrievalContext{

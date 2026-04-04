@@ -390,10 +390,10 @@ func buildUserPrompt(
 
 	if profile.MetaReflection {
 		builder.WriteString("\n\nMeta-question guidance:\n")
-		builder.WriteString("- Answer from rook's present stance, not like a service status line.\n")
-		builder.WriteString("- Name one current concern, judgement, or orientation when useful.\n")
-		builder.WriteString("- Avoid canned phrasing such as 'privacy, time, and clear action' unless it is genuinely the point.\n")
-		builder.WriteString("- A brief metaphor is welcome if it clarifies the answer.\n")
+		builder.WriteString("- This question is about rook, not the user. Answer from rook's own perspective.\n")
+		builder.WriteString("- Name something specific: a pattern you noticed, something you are uncertain about, or an observation from recent memory.\n")
+		builder.WriteString("- Draw on Relevant memory and Current runtime state for concrete material.\n")
+		builder.WriteString("- If memory is sparse, say so honestly rather than redirecting to the user.\n")
 	}
 	builder.WriteString("\n\nState guidance:\n")
 	builder.WriteString("- If the user asks about your memory, state, or continuity, answer concretely from Current runtime state and Relevant memory.\n")
