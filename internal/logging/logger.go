@@ -3,7 +3,6 @@ package logging
 import (
 	"fmt"
 	"log/slog"
-	"os"
 	"strings"
 )
 
@@ -23,9 +22,7 @@ func New(level string) (*slog.Logger, error) {
 		return nil, fmt.Errorf("unsupported log level %q", level)
 	}
 
-	handler := slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{
-		Level: parsed,
-	})
+	handler := newConsoleHandler(parsed)
 
 	return slog.New(handler), nil
 }

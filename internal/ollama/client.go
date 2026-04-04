@@ -276,7 +276,7 @@ func readStatusError(response *http.Response) error {
 
 	return StatusError{
 		StatusCode: response.StatusCode,
-		Message:    strings.TrimSpace(string(body)),
+		Message:    sanitiseStatusMessage(string(body)),
 	}
 }
 

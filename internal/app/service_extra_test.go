@@ -112,7 +112,7 @@ func TestRunMessageHandlerAndInputHelpers(t *testing.T) {
 		t.Fatalf("expected failure text to mention deadline, got %q", service.lastFailureText())
 	}
 	transport := requireFakeTransport(t, service)
-	if len(transport.postedTexts) != 1 || !strings.Contains(transport.postedTexts[0], "internal error") {
+	if len(transport.postedTexts) != 1 || !strings.Contains(transport.postedTexts[0], "warming up") {
 		t.Fatalf("unexpected handler posts %#v", transport.postedTexts)
 	}
 

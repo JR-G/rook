@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/JR-G/rook/internal/failures"
 )
 
 const (
@@ -99,6 +101,15 @@ func TestNewBodyReaderAndStatusParsing(t *testing.T) {
 	})
 	if err == nil || !strings.Contains(err.Error(), "502") {
 		t.Fatalf("unexpected fallback status parse error %v", err)
+	}
+
+	err = readStatusError(&http.Response{
+		StatusCode: http.StatusInternalServerError,
+		Body: io.NopCloser(strings.NewReader(`time=2026-04-04T14:43:14.263+01:00 level=INFO source=server.go:1384 msg="waiting for server to become available" status="llm server loading model"
+[GIN] 2026/04/04 - 14:44:43 | 500 | 1m30s | 127.0.0.1 | POST "/api/chat"`)),
+	})
+	if err == nil || !strings.Contains(err.Error(), "llm server loading model") {
+		t.Fatalf("unexpected sanitised status error %v", err)
 	}
 }
 
@@ -200,5 +211,25 @@ func TestHealthErrorAndSuccessfulChatPayloadInspection(t *testing.T) {
 
 	if _, err := client.Health(context.Background()); err == nil {
 		t.Fatal("expected health failure")
+	}
+}
+
+func TestWrapUserVisibleMappings(t *testing.T) {
+	t.Parallel()
+
+	if got := failures.Message(WrapUserVisible(context.DeadlineExceeded)); !strings.Contains(got, "warming up") {
+		t.Fatalf("unexpected deadline message %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(StatusError{StatusCode: http.StatusInternalServerError, Message: "llm server loading model"})); !strings.Contains(got, "warming up") {
+		t.Fatalf("unexpected loading-model message %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(StatusError{StatusCode: http.StatusTooManyRequests, Message: "busy"})); !strings.Contains(got, "busy") {
+		t.Fatalf("unexpected busy message %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(StatusError{StatusCode: http.StatusInternalServerError, Message: "boom"})); !strings.Contains(got, "failed while generating") {
+		t.Fatalf("unexpected internal-server message %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(errors.New("plain"))); got != "" {
+		t.Fatalf("did not expect plain error to become user-visible, got %q", got)
 	}
 }

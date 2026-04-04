@@ -26,32 +26,32 @@ func TestShouldRespondBranchesAndRunFailure(t *testing.T) {
 
 	service := newTestService(t)
 	service.cfg.Slack.AllowDM = false
-	if service.shouldRespond(slackMessage("hello")) {
+	if shouldRespond, err := service.shouldRespond(context.Background(), slackMessage("hello")); err != nil || shouldRespond {
 		t.Fatal("did not expect DMs to be allowed")
 	}
 
 	service.cfg.Slack.AllowDM = true
-	if !service.shouldRespond(slackMessage("hello")) {
+	if shouldRespond, err := service.shouldRespond(context.Background(), slackMessage("hello")); err != nil || !shouldRespond {
 		t.Fatal("expected DM to be allowed")
 	}
 
 	channelMessage := slackMessage("hello")
 	channelMessage.IsDM = false
 	channelMessage.Mentioned = false
-	if service.shouldRespond(channelMessage) {
+	if shouldRespond, err := service.shouldRespond(context.Background(), channelMessage); err != nil || shouldRespond {
 		t.Fatal("did not expect unmentioned channel message to be allowed")
 	}
 
 	channelMessage.Mentioned = true
 	service.cfg.Slack.AllowedChannels = []string{"C1"}
 	channelMessage.ChannelID = "C2"
-	if service.shouldRespond(channelMessage) {
+	if shouldRespond, err := service.shouldRespond(context.Background(), channelMessage); err != nil || shouldRespond {
 		t.Fatal("did not expect disallowed channel to be allowed")
 	}
 
 	service.cfg.Slack.AllowedChannels = nil
 	service.cfg.Slack.DeniedChannels = []string{"C2"}
-	if service.shouldRespond(channelMessage) {
+	if shouldRespond, err := service.shouldRespond(context.Background(), channelMessage); err != nil || shouldRespond {
 		t.Fatal("did not expect denied channel to be allowed")
 	}
 
@@ -59,6 +59,35 @@ func TestShouldRespondBranchesAndRunFailure(t *testing.T) {
 	transport.runErr = errors.New("run failed")
 	if err := service.Run(context.Background()); err == nil || !strings.Contains(service.lastFailureText(), "run failed") {
 		t.Fatalf("expected run failure to be recorded, got %v / %q", err, service.lastFailureText())
+	}
+}
+
+func TestShouldRespondAllowsActiveThreadContinuation(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(t)
+	if _, err := service.store.RecordEpisode(context.Background(), memory.EpisodeInput{
+		ChannelID: "C1",
+		ThreadTS:  "1.0",
+		UserID:    "rook",
+		Role:      "assistant",
+		Source:    "assistant",
+		Text:      "Earlier reply",
+	}); err != nil {
+		t.Fatalf("record assistant episode: %v", err)
+	}
+
+	channelMessage := slackMessage("hello again")
+	channelMessage.ChannelID = "C1"
+	channelMessage.IsDM = false
+	channelMessage.Mentioned = false
+
+	shouldRespond, err := service.shouldRespond(context.Background(), channelMessage)
+	if err != nil {
+		t.Fatalf("shouldRespond() error = %v", err)
+	}
+	if !shouldRespond {
+		t.Fatal("expected active thread continuation to be allowed")
 	}
 }
 

@@ -121,6 +121,22 @@ func (s *Store) RecentEpisodes(ctx context.Context, limit int) ([]Episode, error
 	return s.loadEpisodes(ctx, limit)
 }
 
+// HasAssistantReplyInThread reports whether rook has already replied in a thread.
+func (s *Store) HasAssistantReplyInThread(ctx context.Context, channelID, threadTS string) (bool, error) {
+	var count int
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT COUNT(*)
+		FROM episodes
+		WHERE channel_id = ?
+		  AND thread_ts = ?
+		  AND source = 'assistant'
+	`, channelID, threadTS).Scan(&count); err != nil {
+		return false, err
+	}
+
+	return count > 0, nil
+}
+
 func scoreItems(items []Item, query string, queryEmbedding []float64, now time.Time) []SearchHit {
 	queryTokens := tokenize(query)
 	hits := make([]SearchHit, 0, len(items))

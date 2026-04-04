@@ -12,6 +12,7 @@ import (
 	"github.com/JR-G/rook/internal/agent"
 	"github.com/JR-G/rook/internal/commands"
 	"github.com/JR-G/rook/internal/config"
+	"github.com/JR-G/rook/internal/failures"
 	"github.com/JR-G/rook/internal/integrations/squad0"
 	"github.com/JR-G/rook/internal/memory"
 	"github.com/JR-G/rook/internal/ollama"
@@ -206,11 +207,15 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 	if err != nil {
 		return err
 	}
-	if observed && !s.shouldRespond(message) {
+	shouldRespond, err := s.shouldRespond(ctx, message)
+	if err != nil {
+		return err
+	}
+	if observed && !shouldRespond {
 		s.logger.Info("observed squad0 message without reply", "channel_id", message.ChannelID, "thread_ts", message.ThreadTS)
 		return nil
 	}
-	if !s.shouldRespond(message) {
+	if !shouldRespond {
 		s.logger.Info(
 			"ignoring slack message due to routing rules",
 			"channel_id",
@@ -219,6 +224,8 @@ func (s *Service) processMessage(ctx context.Context, message slacktransport.Inb
 			message.IsDM,
 			"mentioned",
 			message.Mentioned,
+			"thread_ts",
+			message.ThreadTS,
 		)
 		return nil
 	}
@@ -277,13 +284,14 @@ func (s *Service) runMessageHandler(ctx context.Context, message slacktransport.
 		return
 	}
 
+	err = ollama.WrapUserVisible(err)
 	s.recordFailure(err)
 	s.logger.Error("message handling failed", "error", err)
 	postErr := s.transport.PostMessage(
 		context.Background(),
 		message.ChannelID,
 		message.ThreadTS,
-		"I hit an internal error handling that message.",
+		failures.MessageOr(err),
 	)
 	if postErr != nil {
 		s.logger.Error("failed to post error reply", "error", postErr)
@@ -354,22 +362,28 @@ func (s *Service) observeSquad0(ctx context.Context, message slacktransport.Inbo
 	return true, nil
 }
 
-func (s *Service) shouldRespond(message slacktransport.InboundMessage) bool {
+func (s *Service) shouldRespond(ctx context.Context, message slacktransport.InboundMessage) (bool, error) {
 	cfg := s.currentConfig()
 	if contains(cfg.Slack.DeniedChannels, message.ChannelID) {
-		return false
+		return false, nil
 	}
 	if len(cfg.Slack.AllowedChannels) > 0 && !contains(cfg.Slack.AllowedChannels, message.ChannelID) {
-		return false
+		return false, nil
 	}
 	if message.IsDM {
-		return cfg.Slack.AllowDM
+		return cfg.Slack.AllowDM, nil
 	}
-	if cfg.Slack.MentionRequiredInChannels {
-		return message.Mentioned
+	if !cfg.Slack.MentionRequiredInChannels {
+		return true, nil
+	}
+	if message.Mentioned {
+		return true, nil
+	}
+	if strings.TrimSpace(message.ThreadTS) == "" {
+		return false, nil
 	}
 
-	return true
+	return s.store.HasAssistantReplyInThread(ctx, message.ChannelID, message.ThreadTS)
 }
 
 func (s *Service) normaliseText(text string) string {

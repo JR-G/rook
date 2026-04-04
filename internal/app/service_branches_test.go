@@ -49,4 +49,20 @@ func TestObserveSquad0AndCommandErrorBranches(t *testing.T) {
 	if !handled || err == nil {
 		t.Fatalf("expected memory command to surface a store error, handled=%t err=%v", handled, err)
 	}
+
+	brokenRouting := newTestService(t)
+	if err := brokenRouting.store.Close(); err != nil {
+		t.Fatalf("close store: %v", err)
+	}
+	_, err = brokenRouting.shouldRespond(context.Background(), slacktransport.InboundMessage{
+		ChannelID: "C1",
+		ThreadTS:  "1.0",
+		UserID:    "U1",
+		Text:      "follow up",
+		IsDM:      false,
+		Mentioned: false,
+	})
+	if err == nil {
+		t.Fatal("expected shouldRespond to fail when thread lookup cannot query the store")
+	}
 }

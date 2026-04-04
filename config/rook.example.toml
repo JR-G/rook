@@ -20,7 +20,7 @@ chat_model = "qwen3:4b"
 chat_fallback_models = ["phi4-mini"]
 embedding_model = "nomic-embed-text"
 temperature = 0.7
-chat_timeout = "90s"
+chat_timeout = "180s"
 embed_timeout = "30s"
 
 [memory]

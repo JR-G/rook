@@ -145,7 +145,7 @@ func Default() Config {
 			ChatFallbacks:  []string{"phi4-mini"},
 			EmbeddingModel: "nomic-embed-text",
 			Temperature:    0.7,
-			ChatTimeout:    Duration{Duration: 90 * time.Second},
+			ChatTimeout:    Duration{Duration: 180 * time.Second},
 			EmbedTimeout:   Duration{Duration: 30 * time.Second},
 		},
 		Memory: MemoryConfig{

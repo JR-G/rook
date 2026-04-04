@@ -111,6 +111,25 @@ func TestSearchContextAndReminderBranches(t *testing.T) {
 	if len(contextResult.Episodes) != 1 || len(contextResult.Squad0Episodes) != 1 {
 		t.Fatalf("unexpected episode buckets %#v", contextResult)
 	}
+	if hasReply, err := store.HasAssistantReplyInThread(ctx, "C1", "1.0"); err != nil || hasReply {
+		t.Fatalf("unexpected assistant thread state before reply: %t err=%v", hasReply, err)
+	}
+	if _, err := store.RecordEpisode(ctx, EpisodeInput{
+		ChannelID: "C1",
+		ThreadTS:  "1.0",
+		UserID:    "rook",
+		Role:      "assistant",
+		Source:    "assistant",
+		Text:      "Reply",
+	}); err != nil {
+		t.Fatalf("record assistant episode: %v", err)
+	}
+	if hasReply, err := store.HasAssistantReplyInThread(ctx, "C1", "1.0"); err != nil || !hasReply {
+		t.Fatalf("unexpected assistant thread state after reply: %t err=%v", hasReply, err)
+	}
+	if hasReply, err := store.HasAssistantReplyInThread(ctx, "C1", "2.0"); err != nil || hasReply {
+		t.Fatalf("unexpected assistant thread state for other thread: %t err=%v", hasReply, err)
+	}
 
 	filtered, err := store.MemoriesByTypes(ctx, []Type{Fact, Project, Decision}, 0.95, 1)
 	if err != nil || len(filtered) != 1 || filtered[0].Type != Decision {
