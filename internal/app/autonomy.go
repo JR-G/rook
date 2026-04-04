@@ -323,7 +323,7 @@ func hasWeeknotePost(episodes []memory.Episode, channelID string, since time.Tim
 
 func (s *Service) reflectIfDue(ctx context.Context) error {
 	cfg := s.currentConfig()
-	if !cfg.Autonomy.Enabled || !cfg.Autonomy.ReflectionEnabled {
+	if !cfg.Autonomy.Enabled || !cfg.Autonomy.ReflectionEnabled || s.persona == nil {
 		return nil
 	}
 

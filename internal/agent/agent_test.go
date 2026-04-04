@@ -255,6 +255,21 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !analyseQuery("like?", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
 		t.Fatal("expected short thread follow-up to be detected")
 	}
+	if analyseQuery("", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
+		t.Fatal("expected empty query not to be short follow-up")
+	}
+	if analyseQuery("like?", nil).ShortThreadFollowUp {
+		t.Fatal("expected nil episodes not to trigger short follow-up")
+	}
+	if !analyseQuery("is that right?", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
+		t.Fatal("expected short question to be detected as follow-up")
+	}
+	if analyseQuery("??!!", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
+		t.Fatal("expected punctuation-only query not to be follow-up")
+	}
+	if trimCurrentUserEcho("anything", nil) != nil {
+		t.Fatal("expected nil return for nil episodes")
+	}
 
 	trimmed := trimCurrentUserEcho("oh really?", []memory.Episode{
 		{Source: "assistant", Text: "Steady."},
@@ -268,9 +283,6 @@ func TestAgentConfigHelpers(t *testing.T) {
 	}
 	if kept := excludeThreadEpisodes(nil, "C1", "1.0"); kept != nil {
 		t.Fatalf("expected nil episode slice to stay nil, got %#v", kept)
-	}
-	if rendered := renderThreadEpisodes(nil); rendered != noContext {
-		t.Fatalf("expected empty thread render to use noContext, got %q", rendered)
 	}
 	if hasAssistantTurn([]memory.Episode{{Source: "user", Text: "hello"}}) {
 		t.Fatal("did not expect user-only thread context to count as assistant context")

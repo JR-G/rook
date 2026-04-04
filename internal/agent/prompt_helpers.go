@@ -1,7 +1,6 @@
 package agent
 
 import (
-	"fmt"
 	"strings"
 	"unicode"
 
@@ -122,21 +121,4 @@ func trimCurrentUserEcho(query string, episodes []memory.Episode) []memory.Episo
 	}
 
 	return episodes
-}
-
-func renderThreadEpisodes(episodes []memory.Episode) string {
-	if len(episodes) == 0 {
-		return noContext
-	}
-
-	lines := make([]string, 0, len(episodes))
-	for _, episode := range episodes {
-		text := strings.TrimSpace(episode.Text)
-		if text == "" {
-			text = episode.Summary
-		}
-		lines = append(lines, fmt.Sprintf("- [%s] %s", episode.Source, text))
-	}
-
-	return strings.Join(lines, "\n")
 }
