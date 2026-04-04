@@ -217,8 +217,20 @@ func (s *Service) reload() string {
 		WebMaxResults:      cfg.Web.MaxResults,
 		AutoOnFreshness:    cfg.Web.AutoOnFreshness,
 	}, buildSearcher(cfg))
+	if err := s.refreshPersonaOnReload(); err != nil {
+		s.recordFailure(err)
+		return fmt.Sprintf("reload failed: %v", err)
+	}
 
-	return "configuration reloaded\nnote: Slack token changes still require a process restart"
+	return "configuration reloaded\npersona refreshed from seed files\nnote: Slack token changes still require a process restart"
+}
+
+func (s *Service) refreshPersonaOnReload() error {
+	if s.persona == nil {
+		return nil
+	}
+
+	return s.persona.Consolidate(context.Background())
 }
 
 func helpText() string {

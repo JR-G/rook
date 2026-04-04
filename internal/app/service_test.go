@@ -16,6 +16,7 @@ import (
 	"github.com/JR-G/rook/internal/logging"
 	"github.com/JR-G/rook/internal/memory"
 	"github.com/JR-G/rook/internal/ollama"
+	"github.com/JR-G/rook/internal/persona"
 	slacktransport "github.com/JR-G/rook/internal/slack"
 	"github.com/JR-G/rook/internal/tools/web"
 )
@@ -312,6 +313,29 @@ func TestStatusReloadAndHelpers(t *testing.T) {
 	reply := service.reload()
 	if !strings.Contains(reply, "configuration reloaded") {
 		t.Fatalf("unexpected reload reply %q", reply)
+	}
+}
+
+func TestReloadRefreshesPersonaWhenPresent(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(t)
+	personaManager := persona.New(
+		service.store,
+		service.currentConfig().Persona.CoreConstitutionFile,
+		service.currentConfig().Persona.StableIdentitySeed,
+		service.currentConfig().Persona.VoiceSeedFile,
+		time.Hour,
+		service.now,
+	)
+	if err := personaManager.Seed(context.Background()); err != nil {
+		t.Fatalf("seed persona: %v", err)
+	}
+	service.persona = personaManager
+
+	reply := service.reload()
+	if !strings.Contains(reply, "persona refreshed from seed files") {
+		t.Fatalf("unexpected persona reload reply %q", reply)
 	}
 }
 

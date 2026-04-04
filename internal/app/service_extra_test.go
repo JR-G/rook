@@ -13,6 +13,7 @@ import (
 	"github.com/JR-G/rook/internal/config"
 	"github.com/JR-G/rook/internal/logging"
 	"github.com/JR-G/rook/internal/memory"
+	"github.com/JR-G/rook/internal/persona"
 	slacktransport "github.com/JR-G/rook/internal/slack"
 	"github.com/JR-G/rook/internal/tools/web"
 )
@@ -22,12 +23,36 @@ func TestExecuteCommandVariants(t *testing.T) {
 
 	service := newTestService(t)
 	service.now = func() time.Time { return time.Date(2026, time.April, 1, 10, 0, 0, 0, time.UTC) }
+	personaManager := persona.New(
+		service.store,
+		service.currentConfig().Persona.CoreConstitutionFile,
+		service.currentConfig().Persona.StableIdentitySeed,
+		service.currentConfig().Persona.VoiceSeedFile,
+		time.Hour,
+		service.now,
+	)
+	if err := personaManager.Seed(context.Background()); err != nil {
+		t.Fatalf("seed persona: %v", err)
+	}
+	service.persona = personaManager
 
 	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindHelp}); err != nil || !strings.Contains(response, "rook commands") {
 		t.Fatalf("unexpected help response %q err=%v", response, err)
 	}
 	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindPing}); err != nil || !strings.Contains(response, "pong") {
 		t.Fatalf("unexpected ping response %q err=%v", response, err)
+	}
+	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindStatus}); err != nil || !strings.Contains(response, "rook status") {
+		t.Fatalf("unexpected status response %q err=%v", response, err)
+	}
+	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindMemory}); err != nil || !strings.Contains(response, "No durable memory") {
+		t.Fatalf("unexpected memory response %q err=%v", response, err)
+	}
+	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindModel}); err != nil || !strings.Contains(response, "chat model") {
+		t.Fatalf("unexpected model response %q err=%v", response, err)
+	}
+	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindReload}); err != nil || !strings.Contains(response, "persona refreshed") {
+		t.Fatalf("unexpected reload response %q err=%v", response, err)
 	}
 	if response, err := service.executeCommand(context.Background(), commands.Command{Kind: commands.KindRemind}); err != nil || !strings.Contains(response, "Usage:") {
 		t.Fatalf("unexpected remind response %q err=%v", response, err)
@@ -106,6 +131,26 @@ func TestRunMessageHandlerAndInputHelpers(t *testing.T) {
 	handled, err = service.handleCommandInput(context.Background(), slackMessage("ping"), "ping")
 	if !handled || err != nil {
 		t.Fatalf("expected ping command to be handled: handled=%t err=%v", handled, err)
+	}
+}
+
+func TestHandleReminderWritesCommitmentMemory(t *testing.T) {
+	t.Parallel()
+
+	service := newTestServiceWithClock(t, func() time.Time {
+		return time.Date(2026, time.April, 1, 10, 0, 0, 0, time.UTC)
+	})
+	reply, err := service.handleReminder(context.Background(), slackMessage("hello"), commands.ReminderRequest{
+		Message: "stretch",
+		DueAt:   service.now().Add(30 * time.Minute),
+	})
+	if err != nil || !strings.Contains(reply, "Reminder set for") {
+		t.Fatalf("unexpected reminder reply %q err=%v", reply, err)
+	}
+
+	memories, memoryErr := service.store.SearchMemories(context.Background(), "stretch", nil, 5)
+	if memoryErr != nil || len(memories) == 0 {
+		t.Fatalf("expected reminder commitment memory, got %#v err=%v", memories, memoryErr)
 	}
 }
 
