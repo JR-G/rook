@@ -172,8 +172,8 @@ func modelOptions(model string, temperature float64) map[string]any {
 		return options
 	}
 
-	options["top_k"] = 20
-	options["top_p"] = 0.8
+	options["top_k"] = 40
+	options["top_p"] = 0.85
 
 	return options
 }

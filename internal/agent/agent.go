@@ -43,7 +43,11 @@ type Response struct {
 	WebProvider string
 }
 
-const noContext = "- none"
+const (
+	noContext     = "- none"
+	roleUser      = "user"
+	roleAssistant = "assistant"
+)
 
 // Service orchestrates memory, persona, tools, and local inference.
 type Service struct {
@@ -115,8 +119,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		ChannelID: request.ChannelID,
 		ThreadTS:  request.ThreadTS,
 		UserID:    request.UserID,
-		Role:      "user",
-		Source:    "user",
+		Role:      roleUser,
+		Source:    roleUser,
 		Text:      request.Text,
 	}); err != nil {
 		return Response{}, err
@@ -154,10 +158,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 
 	retrieval = adjustRetrievalForQuery(request.Text, request.ChannelID, request.ThreadTS, threadEpisodes, retrieval)
 	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, runtimeState, searchResults, usedWeb, profile)
-	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
-		{Role: "system", Content: systemPrompt},
-		{Role: "user", Content: userPrompt},
-	}, output.AnswerSchema())
+	messages := buildChatMessages(systemPrompt, userPrompt, threadEpisodes)
+	result, err := s.chatWithFallback(ctx, cfg, messages, output.AnswerSchema())
 	if err != nil {
 		return Response{}, err
 	}
@@ -165,6 +167,10 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 	reply, err := output.ParseAnswer(result.Content)
 	if err != nil {
 		return Response{}, failures.Wrap(err, "The local model returned an invalid reply shape. Try again.")
+	}
+	reply, err = s.repairRepeatedThreadReply(ctx, cfg, systemPrompt, userPrompt, threadEpisodes, reply)
+	if err != nil {
+		return Response{}, err
 	}
 	if usedWeb && !strings.Contains(strings.ToLower(reply), "live web lookup") {
 		reply = fmt.Sprintf("%s\n\nLive web lookup used.", reply)
@@ -174,8 +180,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		ChannelID: request.ChannelID,
 		ThreadTS:  request.ThreadTS,
 		UserID:    "rook",
-		Role:      "assistant",
-		Source:    "assistant",
+		Role:      roleAssistant,
+		Source:    roleAssistant,
 		Text:      reply,
 	}); err != nil {
 		return Response{}, err
@@ -405,15 +411,37 @@ func renderThreadSection(threadEpisodes []memory.Episode, profile queryProfile) 
 	}
 
 	var builder strings.Builder
-	builder.WriteString("\n\nCurrent thread:\n")
-	builder.WriteString(renderThreadEpisodes(threadEpisodes))
-	builder.WriteString("\n\nContinue the live thread naturally. Respond to the latest turn without restarting the conversation from scratch.")
-	builder.WriteString("\nIf the latest turn is a short follow-up, advance or clarify the last answer instead of restating it with minor wording changes.")
+	builder.WriteString("\n\nThread continuation instructions:")
+	builder.WriteString("\nThe preceding assistant/user messages are the live thread. Continue it naturally.")
+	builder.WriteString("\nRespond to the latest user turn without restarting the conversation from scratch.")
+	builder.WriteString("\nDo not reuse your previous reply's opening words, signature phrasing, or metaphor unless the user clearly asks for that exact wording.")
 	if profile.ShortThreadFollowUp {
 		builder.WriteString("\nThis is a short follow-up. Do not repeat the previous reply. Unpack it, answer the implied question, or name concrete examples.")
 	}
 
 	return builder.String()
+}
+
+func buildChatMessages(systemPrompt, userPrompt string, threadEpisodes []memory.Episode) []ollama.Message {
+	messages := make([]ollama.Message, 0, len(threadEpisodes)+2)
+	messages = append(messages, ollama.Message{Role: "system", Content: systemPrompt})
+	for _, ep := range threadEpisodes {
+		role := roleUser
+		if ep.Source == roleAssistant {
+			role = roleAssistant
+		}
+		text := strings.TrimSpace(ep.Text)
+		if text == "" {
+			text = strings.TrimSpace(ep.Summary)
+		}
+		if text == "" {
+			continue
+		}
+		messages = append(messages, ollama.Message{Role: role, Content: text})
+	}
+	messages = append(messages, ollama.Message{Role: "user", Content: userPrompt})
+
+	return messages
 }
 
 func renderMemoryContext(retrieval memory.RetrievalContext) string {

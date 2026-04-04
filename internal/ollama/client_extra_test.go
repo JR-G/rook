@@ -58,7 +58,7 @@ func TestOllamaHelperFunctions(t *testing.T) {
 	}
 
 	qwenOptions := modelOptions("qwen3:4b", 0.7)
-	if qwenOptions["temperature"] != 0.7 || qwenOptions["top_k"] != 20 || qwenOptions["top_p"] != 0.8 {
+	if qwenOptions["temperature"] != 0.7 || qwenOptions["top_k"] != 40 || qwenOptions["top_p"] != 0.85 {
 		t.Fatalf("unexpected qwen options %#v", qwenOptions)
 	}
 	phiOptions := modelOptions("phi4-mini", 0.2)

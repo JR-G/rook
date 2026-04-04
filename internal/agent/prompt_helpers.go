@@ -103,7 +103,7 @@ func isShortThreadFollowUp(query string, threadEpisodes []memory.Episode) bool {
 
 func hasAssistantTurn(episodes []memory.Episode) bool {
 	for _, episode := range episodes {
-		if episode.Source == "assistant" {
+		if episode.Source == roleAssistant {
 			return true
 		}
 	}
@@ -117,7 +117,7 @@ func trimCurrentUserEcho(query string, episodes []memory.Episode) []memory.Episo
 	}
 
 	last := episodes[len(episodes)-1]
-	if last.Source == "user" && strings.TrimSpace(last.Text) == strings.TrimSpace(query) {
+	if last.Source == roleUser && strings.TrimSpace(last.Text) == strings.TrimSpace(query) {
 		return append([]memory.Episode(nil), episodes[:len(episodes)-1]...)
 	}
 

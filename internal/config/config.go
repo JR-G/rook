@@ -121,6 +121,9 @@ type AutonomyConfig struct {
 	WeeknotesEnabled     bool     `toml:"weeknotes_enabled"`
 	WeeknotesChannel     string   `toml:"weeknotes_channel"`
 	WeeknotePostTime     string   `toml:"weeknote_post_time"`
+	ReflectionEnabled    bool     `toml:"reflection_enabled"`
+	ReflectionInterval   Duration `toml:"reflection_interval"`
+	ReflectionChannel    string   `toml:"reflection_channel"`
 	PollInterval         Duration `toml:"poll_interval"`
 }
 
@@ -190,6 +193,7 @@ func Default() Config {
 		Autonomy: AutonomyConfig{
 			ObserveAgentChannels: true,
 			WeeknotePostTime:     "10:00",
+			ReflectionInterval:   Duration{Duration: 24 * time.Hour},
 			PollInterval:         Duration{Duration: time.Minute},
 		},
 	}
@@ -253,6 +257,7 @@ func applyEnv(cfg *Config) {
 	overrideString(&cfg.Web.Ollama.APIKey, "ROOK_WEB_OLLAMA_API_KEY")
 	overrideString(&cfg.Autonomy.WeeknotesChannel, "ROOK_AUTONOMY_WEEKNOTES_CHANNEL")
 	overrideString(&cfg.Autonomy.WeeknotePostTime, "ROOK_AUTONOMY_WEEKNOTE_POST_TIME")
+	overrideString(&cfg.Autonomy.ReflectionChannel, "ROOK_AUTONOMY_REFLECTION_CHANNEL")
 }
 
 func normalise(cfg *Config) {
@@ -367,6 +372,8 @@ func validate(cfg Config) error {
 		return errors.New("autonomy.poll_interval must be zero or greater")
 	case cfg.Autonomy.WeeknotesEnabled && strings.TrimSpace(cfg.Autonomy.WeeknotesChannel) == "":
 		return errors.New("autonomy.weeknotes_channel must not be empty when weeknotes are enabled")
+	case cfg.Autonomy.ReflectionEnabled && cfg.Autonomy.ReflectionInterval.Duration < time.Hour:
+		return errors.New("autonomy.reflection_interval must be at least 1h")
 	case cfg.Autonomy.WeeknotePostTime != "" && !validClockHHMM(cfg.Autonomy.WeeknotePostTime):
 		return errors.New("autonomy.weeknote_post_time must use HH:MM in 24-hour time")
 	}

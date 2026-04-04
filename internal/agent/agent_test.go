@@ -221,10 +221,10 @@ func TestAgentConfigHelpers(t *testing.T) {
 		false,
 		analyseQuery("oh really?", []memory.Episode{{Source: "assistant", Text: "Steady."}}),
 	)
-	if !strings.Contains(threadPrompt, "Current thread:") {
-		t.Fatalf("expected thread context in prompt, got %q", threadPrompt)
+	if !strings.Contains(threadPrompt, "Thread continuation instructions:") {
+		t.Fatalf("expected thread continuation instructions in prompt, got %q", threadPrompt)
 	}
-	if !strings.Contains(threadPrompt, "Continue the live thread naturally") {
+	if !strings.Contains(threadPrompt, "Continue it naturally") {
 		t.Fatalf("expected continuation guidance in prompt, got %q", threadPrompt)
 	}
 	if !strings.Contains(threadPrompt, "short follow-up") {
@@ -233,8 +233,8 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !strings.Contains(threadPrompt, "Do not repeat the previous reply") {
 		t.Fatalf("expected explicit follow-up unpacking guidance in prompt, got %q", threadPrompt)
 	}
-	if !strings.Contains(threadPrompt, "[assistant] Steady. I'm focused on keeping your week legible.") {
-		t.Fatalf("expected thread prompt to use episode text, got %q", threadPrompt)
+	if strings.Contains(threadPrompt, "[assistant] Steady. I'm focused on keeping your week legible.") {
+		t.Fatalf("thread episode text should be in chat messages not user prompt, got %q", threadPrompt)
 	}
 
 	memoryPrompt := buildUserPrompt(
@@ -274,6 +274,37 @@ func TestAgentConfigHelpers(t *testing.T) {
 	}
 	if hasAssistantTurn([]memory.Episode{{Source: "user", Text: "hello"}}) {
 		t.Fatal("did not expect user-only thread context to count as assistant context")
+	}
+
+	chatMessages := buildChatMessages("system prompt", "current question", []memory.Episode{
+		{Source: "user", Text: "how are you today?"},
+		{Source: "assistant", Text: "Steady."},
+		{Source: "user", Text: "oh really?"},
+	})
+	if len(chatMessages) != 5 {
+		t.Fatalf("expected 5 chat messages (system + 3 thread + user), got %d", len(chatMessages))
+	}
+	if chatMessages[0].Role != "system" || chatMessages[1].Role != "user" || chatMessages[2].Role != "assistant" || chatMessages[3].Role != "user" {
+		t.Fatalf("unexpected chat message roles %v", chatMessages)
+	}
+	if chatMessages[4].Content != "current question" {
+		t.Fatalf("expected final message to be user prompt, got %q", chatMessages[4].Content)
+	}
+
+	emptyMessages := buildChatMessages("system", "question", nil)
+	if len(emptyMessages) != 2 {
+		t.Fatalf("expected 2 chat messages for empty thread, got %d", len(emptyMessages))
+	}
+
+	skippedMessages := buildChatMessages("system", "question", []memory.Episode{
+		{Source: "user", Text: ""},
+		{Source: "assistant", Summary: "fallback summary"},
+	})
+	if len(skippedMessages) != 3 {
+		t.Fatalf("expected empty text to be skipped or use summary, got %d messages", len(skippedMessages))
+	}
+	if skippedMessages[1].Content != "fallback summary" {
+		t.Fatalf("expected summary fallback, got %q", skippedMessages[1].Content)
 	}
 }
 

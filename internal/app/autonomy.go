@@ -14,10 +14,13 @@ import (
 )
 
 const (
-	sourceAmbientAgent  = "ambient_agent"
-	sourceWeeknote      = "weeknote"
-	weeknoteEventLimit  = 80
-	defaultWeeknoteTime = "10:00"
+	sourceAmbientAgent      = "ambient_agent"
+	sourceWeeknote          = "weeknote"
+	sourceReflection        = "reflection"
+	weeknoteEventLimit      = 80
+	reflectionEpisodesLimit = 50
+	defaultWeeknoteTime     = "10:00"
+	noActivity              = "- none"
 )
 
 func (s *Service) runAutonomyLoop(ctx context.Context) {
@@ -48,7 +51,22 @@ func (s *Service) runAutonomyLoop(ctx context.Context) {
 }
 
 func (s *Service) dispatchAutonomy(ctx context.Context) error {
+	if err := s.backgroundConsolidate(ctx); err != nil {
+		s.logger.Error("background consolidation failed", "error", err)
+	}
+	if err := s.reflectIfDue(ctx); err != nil {
+		s.logger.Error("reflection failed", "error", err)
+	}
+
 	return s.postWeeknoteIfDue(ctx)
+}
+
+func (s *Service) backgroundConsolidate(ctx context.Context) error {
+	if s.persona == nil {
+		return nil
+	}
+
+	return s.persona.ConsolidateIfDue(ctx)
 }
 
 func (s *Service) observeAmbientActivity(
@@ -234,7 +252,7 @@ func buildWeeknotePrompt(
 
 func formatWeeknoteEpisodes(episodes []memory.Episode) string {
 	if len(episodes) == 0 {
-		return "- none"
+		return noActivity
 	}
 
 	lines := make([]string, 0, len(episodes))
@@ -301,4 +319,156 @@ func hasWeeknotePost(episodes []memory.Episode, channelID string, since time.Tim
 	}
 
 	return false
+}
+
+func (s *Service) reflectIfDue(ctx context.Context) error {
+	cfg := s.currentConfig()
+	if !cfg.Autonomy.Enabled || !cfg.Autonomy.ReflectionEnabled {
+		return nil
+	}
+
+	interval := cfg.Autonomy.ReflectionInterval.Duration
+	if interval <= 0 {
+		interval = 24 * time.Hour
+	}
+
+	recentEpisodes, err := s.store.RecentEpisodes(ctx, reflectionEpisodesLimit)
+	if err != nil {
+		return err
+	}
+
+	cutoff := s.now().UTC().Add(-interval)
+	if hasReflectionSince(recentEpisodes, cutoff) {
+		return nil
+	}
+
+	sinceLast := episodesSince(recentEpisodes, cutoff)
+	if len(sinceLast) == 0 {
+		return nil
+	}
+
+	text, err := s.composeReflection(ctx, cfg, sinceLast)
+	if err != nil {
+		return err
+	}
+
+	s.logger.Info("recording self-reflection", "episode_count", len(sinceLast))
+
+	if _, err := s.store.RecordEpisode(ctx, memory.EpisodeInput{
+		ChannelID: "",
+		ThreadTS:  "",
+		UserID:    "rook",
+		Role:      "assistant",
+		Source:    sourceReflection,
+		Text:      text,
+	}); err != nil {
+		return err
+	}
+
+	if channel := strings.TrimSpace(cfg.Autonomy.ReflectionChannel); channel != "" {
+		s.postReflection(ctx, channel, text)
+	}
+
+	return nil
+}
+
+func (s *Service) postReflection(ctx context.Context, channel, text string) {
+	if err := s.transport.PostMessage(ctx, channel, "", text); err != nil {
+		s.logger.Error("failed to post reflection", "channel_id", channel, "error", err)
+	}
+}
+
+func (s *Service) composeReflection(
+	ctx context.Context,
+	cfg config.Config,
+	episodes []memory.Episode,
+) (string, error) {
+	systemPrompt, err := s.persona.RenderSystemPrompt(ctx)
+	if err != nil {
+		return "", err
+	}
+
+	prompt := buildReflectionPrompt(episodes, s.now().UTC())
+	result, err := s.chatAutonomyWithFallback(ctx, cfg, []ollama.Message{
+		{Role: "system", Content: systemPrompt},
+		{Role: "user", Content: prompt},
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return output.ParseAnswer(result.Content)
+}
+
+func buildReflectionPrompt(episodes []memory.Episode, now time.Time) string {
+	var builder strings.Builder
+	builder.WriteString("You are reflecting privately on your recent activity. This is not a conversation — it is an internal review.\n")
+	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
+	builder.WriteString("Schema:\n")
+	builder.WriteString(output.AnswerSchemaString())
+	builder.WriteString("\n\nReview the activity below and write a brief, honest reflection.\n")
+	builder.WriteString("Consider:\n")
+	builder.WriteString("- What patterns do you notice in recent conversations or questions?\n")
+	builder.WriteString("- What have you observed other agents or users doing?\n")
+	builder.WriteString("- Is there anything you should pay closer attention to?\n")
+	builder.WriteString("- Are there gaps in what you know about the user or their work?\n")
+	builder.WriteString("- How is your conversational quality? Are you repeating yourself or being useful?\n")
+	builder.WriteString("\nConstraints:\n")
+	builder.WriteString("- Keep it under 4 sentences.\n")
+	builder.WriteString("- Sound like rook thinking out loud, not writing a status report.\n")
+	builder.WriteString("- If nothing stands out, say so plainly — do not invent observations.\n")
+	builder.WriteString("- Do not mention JSON, schemas, internal prompts, or system mechanics.\n")
+	builder.WriteString(fmt.Sprintf("\nCurrent time: %s\n", now.Format(time.RFC3339)))
+	builder.WriteString("\nRecent activity:\n")
+	builder.WriteString(formatReflectionEpisodes(episodes))
+	builder.WriteString("\n\nWrite the reflection now.")
+
+	return builder.String()
+}
+
+func formatReflectionEpisodes(episodes []memory.Episode) string {
+	if len(episodes) == 0 {
+		return noActivity
+	}
+
+	lines := make([]string, 0, len(episodes))
+	for _, ep := range episodes {
+		text := strings.TrimSpace(ep.Summary)
+		if text == "" {
+			text = strings.TrimSpace(ep.Text)
+		}
+		if text == "" {
+			continue
+		}
+		if len(text) > 200 {
+			text = text[:200] + "…"
+		}
+		lines = append(lines, fmt.Sprintf("- [%s] %s: %s", ep.CreatedAt.Format(time.RFC3339), ep.Source, text))
+	}
+	if len(lines) == 0 {
+		return noActivity
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func hasReflectionSince(episodes []memory.Episode, since time.Time) bool {
+	for _, ep := range episodes {
+		if ep.Source == sourceReflection && !ep.CreatedAt.Before(since) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func episodesSince(episodes []memory.Episode, since time.Time) []memory.Episode {
+	filtered := make([]memory.Episode, 0, len(episodes))
+	for _, ep := range episodes {
+		if !ep.CreatedAt.Before(since) {
+			filtered = append(filtered, ep)
+		}
+	}
+
+	return filtered
 }
