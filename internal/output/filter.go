@@ -58,7 +58,43 @@ func extractStructuredReply(input string) (string, bool) {
 	if finalReply, ok := extractFinalBlock(input); ok {
 		return finalReply, true
 	}
+	if rawReply, ok := extractRawStructuredReply(input); ok {
+		return rawReply, true
+	}
 
+	return extractJSONStructuredReply(input)
+}
+
+func looksLikeStructuredWrapper(input string) bool {
+	trimmed := strings.TrimSpace(input)
+	lowerInput := strings.ToLower(trimmed)
+	if lowerInput == "" {
+		return false
+	}
+	if json.Valid([]byte(trimmed)) {
+		return false
+	}
+	if strings.Contains(lowerInput, openFinalTag) {
+		return true
+	}
+	for _, prefix := range []string{"block:", "reply:", "final:", "response:"} {
+		if strings.HasPrefix(lowerInput, prefix) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func extractRawStructuredReply(input string) (string, bool) {
+	if !looksLikeStructuredWrapper(input) {
+		return "", false
+	}
+
+	return unwrapStructuredText(input)
+}
+
+func extractJSONStructuredReply(input string) (string, bool) {
 	jsonReply := extractPrimaryText(input)
 	if jsonReply == "" {
 		return "", false

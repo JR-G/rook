@@ -83,6 +83,16 @@ func TestCleanUnwrapsNestedBlockWrappers(t *testing.T) {
 	}
 }
 
+func TestCleanUnwrapsPlainTextBlockWrapper(t *testing.T) {
+	t.Parallel()
+
+	filter := New()
+	got := filter.Clean("block with the reply inside.\nImportant: Do not add any extra text outside the block.\nResponse:\n<final>\nI'm functioning optimally and ready to support you.")
+	if got != "I'm functioning optimally and ready to support you." {
+		t.Fatalf("unexpected plain-text block cleanup %q", got)
+	}
+}
+
 func TestUnwrapStructuredTextHelpers(t *testing.T) {
 	t.Parallel()
 
@@ -119,5 +129,26 @@ func TestStructuredExtractionEdgeCases(t *testing.T) {
 	reply, ok = extractOpenFinalRemainder("<final>\nKeep the thread alive.\n</final>")
 	if !ok || reply != "Keep the thread alive." {
 		t.Fatalf("unexpected closed final remainder %#v ok=%t", reply, ok)
+	}
+}
+
+func TestLooksLikeStructuredWrapper(t *testing.T) {
+	t.Parallel()
+
+	testCases := []struct {
+		input string
+		want  bool
+	}{
+		{input: "", want: false},
+		{input: `{"text":"<final>json should route through json extraction"}`, want: false},
+		{input: "response: <final>hello", want: true},
+		{input: "plain text\n<final>\nhello", want: true},
+		{input: "just plain text", want: false},
+	}
+
+	for _, testCase := range testCases {
+		if got := looksLikeStructuredWrapper(testCase.input); got != testCase.want {
+			t.Fatalf("looksLikeStructuredWrapper(%q) = %t, want %t", testCase.input, got, testCase.want)
+		}
 	}
 }
