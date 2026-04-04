@@ -184,6 +184,17 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !strings.Contains(metaPrompt, "present stance") {
 		t.Fatalf("expected present-stance hint in meta prompt, got %q", metaPrompt)
 	}
+
+	retrieval := memory.RetrievalContext{
+		Episodes: []memory.Episode{{Source: "assistant", Summary: "I'm focused on your priorities: privacy, time, and clear action."}},
+	}
+	adjusted := adjustRetrievalForQuery("how are you today?", retrieval)
+	if len(adjusted.Episodes) != 0 {
+		t.Fatalf("expected meta-query retrieval to drop historical episodes, got %#v", adjusted.Episodes)
+	}
+	if len(adjustRetrievalForQuery("what changed?", retrieval).Episodes) != 1 {
+		t.Fatal("did not expect ordinary query retrieval to drop episodes")
+	}
 }
 
 type roundTripFunc func(*http.Request) (*http.Response, error)

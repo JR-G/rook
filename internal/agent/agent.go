@@ -141,6 +141,7 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 
+	retrieval = adjustRetrievalForQuery(request.Text, retrieval)
 	userPrompt := buildUserPrompt(request.Text, retrieval, searchResults, usedWeb)
 	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
@@ -350,6 +351,16 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
 
 	return builder.String()
+}
+
+func adjustRetrievalForQuery(query string, retrieval memory.RetrievalContext) memory.RetrievalContext {
+	if !isMetaReflectionQuery(query) {
+		return retrieval
+	}
+
+	retrieval.Episodes = nil
+
+	return retrieval
 }
 
 func isMetaReflectionQuery(query string) bool {

@@ -85,6 +85,10 @@ func New(cfgPath string, cfg config.Config, logger *slog.Logger) (*Service, erro
 		_ = store.Close()
 		return nil, err
 	}
+	if err := personaManager.Consolidate(context.Background()); err != nil {
+		_ = store.Close()
+		return nil, err
+	}
 
 	ollamaClient := ollama.New(
 		cfg.Ollama.Host,

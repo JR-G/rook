@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"database/sql"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,7 @@ import (
 	"github.com/JR-G/rook/internal/persona"
 	slacktransport "github.com/JR-G/rook/internal/slack"
 	"github.com/JR-G/rook/internal/tools/web"
+	_ "modernc.org/sqlite"
 )
 
 func TestExecuteCommandVariants(t *testing.T) {
@@ -250,6 +252,221 @@ auto_on_freshness = true
 	}
 	if err := service.Close(); err != nil {
 		t.Fatalf("close service: %v", err)
+	}
+}
+
+func TestNewRefreshesPersonaFromUpdatedSeedFiles(t *testing.T) {
+	t.Parallel()
+
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "rook.toml")
+	corePath := filepath.Join(tempDir, "core.md")
+	stablePath := filepath.Join(tempDir, "stable.md")
+	voicePath := filepath.Join(tempDir, "voice.md")
+	for path, content := range map[string]string{
+		corePath:   "core",
+		stablePath: "stable one",
+		voicePath:  "voice one",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write persona file: %v", err)
+		}
+	}
+	if err := os.WriteFile(cfgPath, []byte(`
+[service]
+name = "rook"
+log_level = "error"
+data_dir = "./data"
+timezone = "UTC"
+
+[slack]
+bot_token = "bot-token"
+app_token = "app-token"
+allow_dm = true
+mention_required_in_channels = true
+allowed_channels = []
+denied_channels = []
+max_concurrent_handlers = 1
+
+[ollama]
+host = "http://127.0.0.1:11434"
+chat_model = "qwen3:4b"
+chat_fallback_models = ["phi4-mini"]
+embedding_model = "nomic-embed-text"
+temperature = 0.7
+chat_timeout = "1s"
+embed_timeout = "1s"
+
+[memory]
+db_path = "./rook.sqlite"
+max_prompt_items = 4
+max_episode_items = 2
+max_search_results = 8
+episode_retention_days = 30
+consolidation_interval = "1h"
+min_write_importance = 0.6
+reminder_poll_interval = "10ms"
+
+[persona]
+core_constitution_file = "./core.md"
+stable_identity_seed_file = "./stable.md"
+voice_seed_file = "./voice.md"
+
+[web]
+enabled = false
+provider = "duckduckgo"
+timeout = "5s"
+max_results = 2
+user_agent = "rook-test"
+auto_on_freshness = true
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	service, err := New(cfgPath, cfg, logger)
+	if err != nil {
+		t.Fatalf("new service: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("close first service: %v", err)
+	}
+
+	for path, content := range map[string]string{
+		stablePath: "stable two",
+		voicePath:  "voice two",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("rewrite persona file: %v", err)
+		}
+	}
+
+	service, err = New(cfgPath, cfg, logger)
+	if err != nil {
+		t.Fatalf("new service after seed refresh: %v", err)
+	}
+	t.Cleanup(func() { _ = service.Close() })
+
+	snapshot, err := service.persona.Snapshot(context.Background())
+	if err != nil {
+		t.Fatalf("persona snapshot: %v", err)
+	}
+	if !strings.Contains(snapshot.StableIdentity, "stable two") {
+		t.Fatalf("expected refreshed stable identity, got %q", snapshot.StableIdentity)
+	}
+	if !strings.Contains(snapshot.EvolvingVoice, "voice two") {
+		t.Fatalf("expected refreshed voice seed, got %q", snapshot.EvolvingVoice)
+	}
+}
+
+func TestNewFailsWhenStartupPersonaConsolidationFails(t *testing.T) {
+	t.Parallel()
+
+	logger, err := logging.New("error")
+	if err != nil {
+		t.Fatalf("logger: %v", err)
+	}
+
+	tempDir := t.TempDir()
+	cfgPath := filepath.Join(tempDir, "rook.toml")
+	corePath := filepath.Join(tempDir, "core.md")
+	stablePath := filepath.Join(tempDir, "stable.md")
+	voicePath := filepath.Join(tempDir, "voice.md")
+	for path, content := range map[string]string{
+		corePath:   "core",
+		stablePath: "stable",
+		voicePath:  "voice",
+	} {
+		if err := os.WriteFile(path, []byte(content), 0o600); err != nil {
+			t.Fatalf("write persona file: %v", err)
+		}
+	}
+	if err := os.WriteFile(cfgPath, []byte(`
+[service]
+name = "rook"
+log_level = "error"
+data_dir = "./data"
+timezone = "UTC"
+
+[slack]
+bot_token = "bot-token"
+app_token = "app-token"
+allow_dm = true
+mention_required_in_channels = true
+allowed_channels = []
+denied_channels = []
+max_concurrent_handlers = 1
+
+[ollama]
+host = "http://127.0.0.1:11434"
+chat_model = "qwen3:4b"
+chat_fallback_models = ["phi4-mini"]
+embedding_model = "nomic-embed-text"
+temperature = 0.7
+chat_timeout = "1s"
+embed_timeout = "1s"
+
+[memory]
+db_path = "./rook.sqlite"
+max_prompt_items = 4
+max_episode_items = 2
+max_search_results = 8
+episode_retention_days = 30
+consolidation_interval = "1h"
+min_write_importance = 0.6
+reminder_poll_interval = "10ms"
+
+[persona]
+core_constitution_file = "./core.md"
+stable_identity_seed_file = "./stable.md"
+voice_seed_file = "./voice.md"
+
+[web]
+enabled = false
+provider = "duckduckgo"
+timeout = "5s"
+max_results = 2
+user_agent = "rook-test"
+auto_on_freshness = true
+`), 0o600); err != nil {
+		t.Fatalf("write config: %v", err)
+	}
+
+	cfg, err := config.Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	service, err := New(cfgPath, cfg, logger)
+	if err != nil {
+		t.Fatalf("initial new service: %v", err)
+	}
+	if err := service.Close(); err != nil {
+		t.Fatalf("close initial service: %v", err)
+	}
+
+	db, err := sql.Open("sqlite", cfg.Memory.DBPath)
+	if err != nil {
+		t.Fatalf("open raw sqlite: %v", err)
+	}
+	t.Cleanup(func() { _ = db.Close() })
+	if _, err := db.Exec(`
+		INSERT INTO episodes (
+			channel_id, thread_ts, user_id, role, source, text, summary, created_at
+		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+	`, "C1", "1.0", "U1", "user", "user", "hello", "hello", "bad-time"); err != nil {
+		t.Fatalf("insert malformed episode: %v", err)
+	}
+
+	if _, err := New(cfgPath, cfg, logger); err == nil {
+		t.Fatal("expected startup persona consolidation failure")
 	}
 }
 
