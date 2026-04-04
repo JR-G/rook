@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"testing"
 
+	"github.com/slack-go/slack"
 	"github.com/slack-go/slack/slackevents"
 	"github.com/slack-go/slack/socketmode"
 )
@@ -21,6 +22,25 @@ func TestNewAndRunAuthFailure(t *testing.T) {
 	transport := newTransport(&fakeAPI{authErr: errors.New("auth failed")}, &fakeSocket{}, make(chan socketmode.Event), slog.New(slog.NewTextHandler(io.Discard, nil)))
 	if err := transport.Run(context.Background(), func(context.Context, InboundMessage) {}); err == nil {
 		t.Fatal("expected auth failure")
+	}
+}
+
+func TestRunReturnsWhenEventChannelCloses(t *testing.T) {
+	t.Parallel()
+
+	events := make(chan socketmode.Event)
+	close(events)
+
+	transport := newTransport(
+		&fakeAPI{authResponse: &slack.AuthTestResponse{UserID: "UROOK", BotID: "BROOK"}},
+		&fakeSocket{runErr: errors.New("socket stopped")},
+		events,
+		slog.New(slog.NewTextHandler(io.Discard, nil)),
+	)
+
+	err := transport.Run(context.Background(), func(context.Context, InboundMessage) {})
+	if err == nil || err.Error() != "slack socket event channel closed" {
+		t.Fatalf("unexpected run error: %v", err)
 	}
 }
 
@@ -65,6 +85,16 @@ func TestHandleEventStatusVariants(t *testing.T) {
 		if transport.Status().LastError == "" {
 			t.Fatalf("expected error to be recorded for %s", eventType)
 		}
+	}
+
+	transport.handleEvent(context.Background(), socketmode.Event{
+		Type: socketmode.EventTypeDisconnect,
+		Request: &socketmode.Request{
+			Reason: "warning",
+		},
+	}, handler)
+	if transport.Status().LastError == "" {
+		t.Fatal("expected disconnect with reason to update status")
 	}
 
 	request := socketmode.Request{}
@@ -155,5 +185,13 @@ func TestHandleEventsAPIBranches(t *testing.T) {
 		},
 	}, func(context.Context, InboundMessage) {
 		t.Fatal("did not expect mentioned channel message event to be handled")
+	})
+
+	transport.handleEventsAPI(context.Background(), slackevents.EventsAPIEvent{
+		InnerEvent: slackevents.EventsAPIInnerEvent{
+			Data: "unsupported",
+		},
+	}, func(context.Context, InboundMessage) {
+		t.Fatal("did not expect unsupported event payload to be handled")
 	})
 }
