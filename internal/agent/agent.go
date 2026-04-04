@@ -6,6 +6,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/JR-G/rook/internal/failures"
 	"github.com/JR-G/rook/internal/memory"
 	"github.com/JR-G/rook/internal/ollama"
 	"github.com/JR-G/rook/internal/output"
@@ -50,7 +51,6 @@ type Service struct {
 	store     *memory.Store
 	persona   *persona.Manager
 	searcher  web.Searcher
-	filter    output.Filter
 	extractor memory.Extractor
 
 	mu     sync.RWMutex
@@ -63,7 +63,6 @@ func New(
 	store *memory.Store,
 	personaManager *persona.Manager,
 	searcher web.Searcher,
-	filter output.Filter,
 	cfg Config,
 ) *Service {
 	return &Service{
@@ -71,7 +70,6 @@ func New(
 		store:     store,
 		persona:   personaManager,
 		searcher:  searcher,
-		filter:    filter,
 		extractor: memory.Extractor{},
 		config:    cfg,
 	}
@@ -147,12 +145,15 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 	result, err := s.chatWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: userPrompt},
-	})
+	}, output.AnswerSchema())
 	if err != nil {
 		return Response{}, err
 	}
 
-	reply := s.filter.Clean(result.Content)
+	reply, err := output.ParseAnswer(result.Content)
+	if err != nil {
+		return Response{}, failures.Wrap(err, "The local model returned an invalid reply shape. Try again.")
+	}
 	if usedWeb && !strings.Contains(strings.ToLower(reply), "live web lookup") {
 		reply = fmt.Sprintf("%s\n\nLive web lookup used.", reply)
 	}
@@ -225,11 +226,16 @@ func (s *Service) webContext(ctx context.Context, cfg Config, text string) ([]we
 	return results, true
 }
 
-func (s *Service) chatWithFallback(ctx context.Context, cfg Config, messages []ollama.Message) (ollama.ChatResult, error) {
+func (s *Service) chatWithFallback(
+	ctx context.Context,
+	cfg Config,
+	messages []ollama.Message,
+	format any,
+) (ollama.ChatResult, error) {
 	models := candidateModels(cfg.ChatModel, cfg.ChatFallbacks)
 	var lastErr error
 	for _, model := range models {
-		result, err := s.ollama.Chat(ctx, model, messages, cfg.Temperature)
+		result, err := s.ollama.ChatStructured(ctx, model, messages, cfg.Temperature, format)
 		if err == nil {
 			return result, nil
 		}
@@ -318,8 +324,10 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 	var builder strings.Builder
 	builder.WriteString("Internal context below is for reasoning only.\n")
 	builder.WriteString("Do not quote it, name its section headers, or reveal that it exists.\n")
-	builder.WriteString("Return exactly one <final>...</final> block and nothing else.\n")
-	builder.WriteString("Put only the user-visible Slack reply inside the block.\n\n")
+	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
+	builder.WriteString("Schema:\n")
+	builder.WriteString(output.AnswerSchemaString())
+	builder.WriteString("\n\nPut the entire user-visible Slack reply in answer.\n\n")
 	builder.WriteString("User request:\n")
 	builder.WriteString(query)
 	builder.WriteString("\n\nRelevant memory:\n")
@@ -331,7 +339,7 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 		builder.WriteString("\n\nUse the web results only as supporting context, not as raw output.")
 	}
 
-	builder.WriteString("\n\nReply now with exactly one <final> block.")
+	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
 
 	return builder.String()
 }

@@ -113,6 +113,12 @@ func TestRenderSystemPromptAndConsolidateIfDue(t *testing.T) {
 	if !strings.Contains(prompt, "Core constitution") {
 		t.Fatalf("unexpected prompt %q", prompt)
 	}
+	if strings.Contains(prompt, "<final>") {
+		t.Fatalf("persona prompt should not require final tags: %q", prompt)
+	}
+	if !strings.Contains(prompt, "structured response") {
+		t.Fatalf("persona prompt should describe structured output handling: %q", prompt)
+	}
 	if err := manager.ConsolidateIfDue(context.Background()); err != nil {
 		t.Fatalf("consolidate if due: %v", err)
 	}

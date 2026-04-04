@@ -13,7 +13,6 @@ import (
 
 	"github.com/JR-G/rook/internal/memory"
 	"github.com/JR-G/rook/internal/ollama"
-	"github.com/JR-G/rook/internal/output"
 	"github.com/JR-G/rook/internal/persona"
 	"github.com/JR-G/rook/internal/tools/web"
 )
@@ -67,7 +66,7 @@ func TestRespondErrorAndNoticeBranches(t *testing.T) {
 		case "/api/chat":
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>Already noted.\n\nLive web lookup used.</final>"}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"{\"answer\":\"Already noted.\\n\\nLive web lookup used.\"}"}}`)),
 				Header:     make(http.Header),
 			}, nil
 		case "/api/embed":
@@ -127,7 +126,7 @@ func TestRespondErrorAndNoticeBranches(t *testing.T) {
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>ok</final>"}}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"{\"answer\":\"ok\"}"}}`)),
 					Header:     make(http.Header),
 				}, nil
 			}),
@@ -135,7 +134,6 @@ func TestRespondErrorAndNoticeBranches(t *testing.T) {
 		store,
 		personaManager,
 		web.NoopSearcher{},
-		output.New(),
 		Config{ChatModel: "qwen3:4b", EmbeddingModel: "nomic-embed-text"},
 	)
 	if _, err := badService.Respond(context.Background(), Request{ChannelID: "D1", ThreadTS: "1.0", UserID: "U1", Text: "hello"}); err == nil {

@@ -9,7 +9,6 @@ import (
 var (
 	thinkingBlockPattern = regexp.MustCompile(`(?is)<think>.*?</think>`)
 	blankLinePattern     = regexp.MustCompile(`\n{3,}`)
-	finalBlockPattern    = regexp.MustCompile(`(?is)<final>\s*(.*?)\s*</final>`)
 )
 
 const (
@@ -17,7 +16,8 @@ const (
 	openFinalTag           = "<final>"
 )
 
-// Filter sanitises model output before it is shown in Slack.
+// Filter is a fallback sanitizer for legacy or malformed model output.
+// The main runtime path now relies on schema-constrained replies instead.
 type Filter struct {
 	MaxChars int
 }
@@ -55,43 +55,11 @@ func (f Filter) Clean(input string) string {
 }
 
 func extractStructuredReply(input string) (string, bool) {
-	if finalReply, ok := extractFinalBlock(input); ok {
-		return finalReply, true
-	}
-	if rawReply, ok := extractRawStructuredReply(input); ok {
-		return rawReply, true
+	if jsonReply, ok := extractJSONStructuredReply(input); ok {
+		return jsonReply, true
 	}
 
-	return extractJSONStructuredReply(input)
-}
-
-func looksLikeStructuredWrapper(input string) bool {
-	trimmed := strings.TrimSpace(input)
-	lowerInput := strings.ToLower(trimmed)
-	if lowerInput == "" {
-		return false
-	}
-	if json.Valid([]byte(trimmed)) {
-		return false
-	}
-	if strings.Contains(lowerInput, openFinalTag) {
-		return true
-	}
-	for _, prefix := range []string{"block:", "reply:", "final:", "response:"} {
-		if strings.HasPrefix(lowerInput, prefix) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func extractRawStructuredReply(input string) (string, bool) {
-	if !looksLikeStructuredWrapper(input) {
-		return "", false
-	}
-
-	return unwrapStructuredText(input)
+	return extractFinalReply(input)
 }
 
 func extractJSONStructuredReply(input string) (string, bool) {
@@ -99,17 +67,36 @@ func extractJSONStructuredReply(input string) (string, bool) {
 	if jsonReply == "" {
 		return "", false
 	}
+	if finalReply, ok := extractFinalReply(jsonReply); ok {
+		return finalReply, true
+	}
 
-	return unwrapStructuredText(jsonReply)
+	return strings.TrimSpace(jsonReply), strings.TrimSpace(jsonReply) != ""
 }
 
-func extractFinalBlock(input string) (string, bool) {
-	matches := finalBlockPattern.FindStringSubmatch(input)
-	if len(matches) != 2 {
+func extractFinalReply(input string) (string, bool) {
+	lowerInput := strings.ToLower(input)
+	openIndex := strings.LastIndex(lowerInput, openFinalTag)
+	if openIndex < 0 {
 		return "", false
 	}
 
-	return strings.TrimSpace(matches[1]), true
+	remainder := input[openIndex+len(openFinalTag):]
+	closeIndex := strings.Index(strings.ToLower(remainder), "</final>")
+	if closeIndex >= 0 {
+		remainder = remainder[:closeIndex]
+	}
+
+	trimmed := strings.TrimSpace(remainder)
+	if trimmed == "" {
+		return "", false
+	}
+
+	return trimmed, true
+}
+
+func extractOpenFinalReply(input string) (string, bool) {
+	return extractFinalReply(input)
 }
 
 func extractPrimaryText(input string) string {
@@ -120,7 +107,7 @@ func extractPrimaryText(input string) string {
 
 	var payload map[string]any
 	if err := json.Unmarshal([]byte(trimmed), &payload); err != nil {
-		return trimmed
+		return ""
 	}
 
 	for _, key := range []string{"answer", "response", "content", "text", "message"} {
@@ -135,55 +122,6 @@ func extractPrimaryText(input string) string {
 	}
 
 	return ""
-}
-
-func unwrapStructuredText(input string) (string, bool) {
-	trimmed := strings.TrimSpace(input)
-	if trimmed == "" {
-		return "", false
-	}
-
-	if finalReply, ok := extractFinalBlock(trimmed); ok {
-		return finalReply, true
-	}
-
-	lowerTrimmed := strings.ToLower(trimmed)
-	for _, prefix := range []string{"block:", "reply:", "final:"} {
-		if !strings.HasPrefix(lowerTrimmed, prefix) {
-			continue
-		}
-		trimmed = strings.TrimSpace(trimmed[len(prefix):])
-		break
-	}
-
-	if trimmed == "" {
-		return "", false
-	}
-	if finalReply, ok := extractFinalBlock(trimmed); ok {
-		return finalReply, true
-	}
-	if finalReply, ok := extractOpenFinalRemainder(trimmed); ok {
-		return finalReply, true
-	}
-
-	return trimmed, true
-}
-
-func extractOpenFinalRemainder(input string) (string, bool) {
-	lowerInput := strings.ToLower(input)
-	index := strings.Index(lowerInput, openFinalTag)
-	if index < 0 {
-		return "", false
-	}
-
-	remainder := strings.TrimSpace(input[index+len(openFinalTag):])
-	remainder = strings.TrimSuffix(remainder, "</final>")
-	remainder = strings.TrimSpace(remainder)
-	if remainder == "" {
-		return "", false
-	}
-
-	return remainder, true
 }
 
 func removeInternalLines(input string) string {
@@ -215,10 +153,6 @@ func removeInternalLines(input string) string {
 			strings.HasPrefix(lower, "stable identity:"),
 			strings.HasPrefix(lower, "evolving voice:"),
 			strings.HasPrefix(lower, "slack output rules:"),
-			strings.HasPrefix(lower, "let me write:"),
-			strings.HasPrefix(lower, "i will write:"),
-			strings.HasPrefix(lower, "response:"),
-			strings.HasPrefix(lower, "block:"),
 			trimmed == "<final>" || trimmed == "</final>":
 			continue
 		}

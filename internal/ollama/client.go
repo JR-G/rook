@@ -74,10 +74,31 @@ func NewWithHTTPClient(host string, chatTimeout, embedTimeout time.Duration, htt
 
 // Chat sends a non-streaming chat request.
 func (c *Client) Chat(ctx context.Context, model string, messages []Message, temperature float64) (ChatResult, error) {
+	return c.chatWithFormat(ctx, model, messages, temperature, nil)
+}
+
+// ChatStructured sends a non-streaming chat request with a required output format.
+func (c *Client) ChatStructured(
+	ctx context.Context,
+	model string,
+	messages []Message,
+	temperature float64,
+	format any,
+) (ChatResult, error) {
+	return c.chatWithFormat(ctx, model, messages, temperature, format)
+}
+
+func (c *Client) chatWithFormat(
+	ctx context.Context,
+	model string,
+	messages []Message,
+	temperature float64,
+	format any,
+) (ChatResult, error) {
 	requestCtx, cancel := context.WithTimeout(ctx, c.chatTimeout)
 	defer cancel()
 
-	response, err := c.chatOnce(requestCtx, model, messages, temperature, true)
+	response, err := c.chatOnce(requestCtx, model, messages, temperature, true, format)
 	if err == nil {
 		return response, nil
 	}
@@ -85,7 +106,7 @@ func (c *Client) Chat(ctx context.Context, model string, messages []Message, tem
 		return ChatResult{}, err
 	}
 
-	return c.chatOnce(requestCtx, model, messages, temperature, false)
+	return c.chatOnce(requestCtx, model, messages, temperature, false, format)
 }
 
 // ShouldFallbackModel reports whether another local chat model should be tried.
@@ -98,12 +119,15 @@ func ShouldFallbackModel(err error) bool {
 	return statusErr.StatusCode == http.StatusBadRequest || statusErr.StatusCode == http.StatusNotFound
 }
 
-func chatPayload(model string, messages []Message, temperature float64, disableThinking bool) map[string]any {
+func chatPayload(model string, messages []Message, temperature float64, disableThinking bool, format any) map[string]any {
 	payload := map[string]any{
 		"model":    model,
 		"messages": messages,
 		"stream":   false,
 		"options":  modelOptions(model, temperature),
+	}
+	if format != nil {
+		payload["format"] = format
 	}
 
 	if disableThinking && usesThinkingToggle(model) {
@@ -119,6 +143,7 @@ func (c *Client) chatOnce(
 	messages []Message,
 	temperature float64,
 	disableThinking bool,
+	format any,
 ) (ChatResult, error) {
 	var response struct {
 		Model   string `json:"model"`
@@ -127,7 +152,7 @@ func (c *Client) chatOnce(
 		} `json:"message"`
 	}
 
-	err := c.doJSON(ctx, http.MethodPost, "/api/chat", chatPayload(model, messages, temperature, disableThinking), &response)
+	err := c.doJSON(ctx, http.MethodPost, "/api/chat", chatPayload(model, messages, temperature, disableThinking, format), &response)
 	if err != nil {
 		return ChatResult{}, err
 	}

@@ -16,7 +16,6 @@ import (
 	"github.com/JR-G/rook/internal/integrations/squad0"
 	"github.com/JR-G/rook/internal/memory"
 	"github.com/JR-G/rook/internal/ollama"
-	"github.com/JR-G/rook/internal/output"
 	"github.com/JR-G/rook/internal/persona"
 	slacktransport "github.com/JR-G/rook/internal/slack"
 	"github.com/JR-G/rook/internal/tools/web"
@@ -120,7 +119,6 @@ func newAgentService(
 		store,
 		personaManager,
 		buildSearcher(cfg),
-		output.New(),
 		agent.Config{
 			ChatModel:          cfg.Ollama.ChatModel,
 			ChatFallbacks:      cfg.Ollama.ChatFallbacks,

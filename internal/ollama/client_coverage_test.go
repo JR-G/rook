@@ -47,7 +47,13 @@ func TestChatRetriesWithoutThink(t *testing.T) {
 		}),
 	})
 
-	result, err := client.Chat(context.Background(), "qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7)
+	result, err := client.ChatStructured(
+		context.Background(),
+		"qwen3:4b",
+		[]Message{{Role: "user", Content: "hi"}},
+		0.7,
+		map[string]any{"type": "object"},
+	)
 	if err != nil {
 		t.Fatalf("chat retry failed: %v", err)
 	}

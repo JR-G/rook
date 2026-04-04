@@ -66,9 +66,12 @@ func TestOllamaHelperFunctions(t *testing.T) {
 		t.Fatalf("unexpected phi options %#v", phiOptions)
 	}
 
-	payload := chatPayload("qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7, true)
+	payload := chatPayload("qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7, true, map[string]any{"type": "object"})
 	if payload["think"] != false {
 		t.Fatalf("expected think=false payload, got %#v", payload)
+	}
+	if payload["format"] == nil {
+		t.Fatalf("expected structured format payload, got %#v", payload)
 	}
 }
 
@@ -201,11 +204,11 @@ func TestHealthErrorAndSuccessfulChatPayloadInspection(t *testing.T) {
 		}),
 	})
 
-	result, err := client.Chat(context.Background(), "qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7)
+	result, err := client.ChatStructured(context.Background(), "qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7, map[string]any{"type": "object"})
 	if err != nil || result.Content != "ok" {
 		t.Fatalf("unexpected chat result %#v err=%v", result, err)
 	}
-	if len(requests) != 1 || requests[0]["think"] != false {
+	if len(requests) != 1 || requests[0]["think"] != false || requests[0]["format"] == nil {
 		t.Fatalf("unexpected chat requests %#v", requests)
 	}
 

@@ -45,7 +45,7 @@ func TestPersistCandidateAndHelperRendering(t *testing.T) {
 		case testAgentChatEndpoint:
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>ok</final>"}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"{\"answer\":\"ok\"}"}}`)),
 				Header:     make(http.Header),
 			}, nil
 		default:
@@ -121,10 +121,15 @@ func TestChatFallbackAndWebHelpers(t *testing.T) {
 		}
 	}))
 
-	if _, err := service.chatWithFallback(context.Background(), Config{}, nil); err == nil {
+	if _, err := service.chatWithFallback(context.Background(), Config{}, nil, output.AnswerSchema()); err == nil {
 		t.Fatal("expected empty chat config to fail")
 	}
-	if _, err := service.chatWithFallback(context.Background(), service.snapshot(), []ollama.Message{{Role: "user", Content: "hi"}}); err == nil {
+	if _, err := service.chatWithFallback(
+		context.Background(),
+		service.snapshot(),
+		[]ollama.Message{{Role: "user", Content: "hi"}},
+		output.AnswerSchema(),
+	); err == nil {
 		t.Fatal("expected non-fallback chat error")
 	}
 
@@ -187,7 +192,6 @@ func newAgentTestService(t *testing.T, transport http.RoundTripper) (*Service, *
 		store,
 		personaManager,
 		web.NoopSearcher{},
-		output.New(),
 		Config{
 			ChatModel:          "qwen3:4b",
 			ChatFallbacks:      []string{"phi4-mini"},

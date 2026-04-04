@@ -58,6 +58,12 @@ func TestRenderSnapshotAndConsolidateFromEvidence(t *testing.T) {
 	if !strings.Contains(prompt, "Core constitution:") || !strings.Contains(prompt, "Stable identity:") {
 		t.Fatalf("unexpected system prompt %q", prompt)
 	}
+	if strings.Contains(prompt, "<final>") {
+		t.Fatalf("prompt should not instruct final tags anymore: %q", prompt)
+	}
+	if !strings.Contains(prompt, "structured response") {
+		t.Fatalf("prompt should describe structured runtime handling: %q", prompt)
+	}
 
 	candidates := []memory.Candidate{
 		{

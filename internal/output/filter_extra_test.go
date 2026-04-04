@@ -15,6 +15,7 @@ func TestExtractPrimaryTextVariants(t *testing.T) {
 		{input: `{"message":"reply"}`, want: "reply"},
 		{input: `{"unused":"reply"}`, want: ""},
 		{input: "not json", want: ""},
+		{input: `["reply"]`, want: ""},
 	}
 
 	for _, testCase := range cases {
@@ -103,62 +104,41 @@ func TestCleanStripsScaffoldingLines(t *testing.T) {
 	}
 }
 
-func TestUnwrapStructuredTextHelpers(t *testing.T) {
+func TestExtractOpenFinalReply(t *testing.T) {
 	t.Parallel()
 
-	reply, ok := unwrapStructuredText("reply: steady course")
-	if !ok || reply != "steady course" {
-		t.Fatalf("unexpected reply unwrap %#v ok=%t", reply, ok)
-	}
-
-	reply, ok = extractOpenFinalRemainder("block:\n<final>\nKeep moving.")
+	reply, ok := extractOpenFinalReply("block:\n<final>\nKeep moving.")
 	if !ok || reply != "Keep moving." {
 		t.Fatalf("unexpected open final unwrap %#v ok=%t", reply, ok)
 	}
 
-	if _, ok = extractOpenFinalRemainder("plain text"); ok {
+	if _, ok = extractOpenFinalReply("plain text"); ok {
 		t.Fatal("did not expect plain text to look like an open final block")
-	}
-	if _, ok = unwrapStructuredText("   "); ok {
-		t.Fatal("did not expect blank text to unwrap")
 	}
 }
 
 func TestStructuredExtractionEdgeCases(t *testing.T) {
 	t.Parallel()
 
-	if got := extractPrimaryText(`["reply"]`); got != `["reply"]` {
+	if got := extractPrimaryText(`["reply"]`); got != "" {
 		t.Fatalf("unexpected non-object json fallback %q", got)
 	}
 
-	reply, ok := unwrapStructuredText("final: <final>Trim to the point.</final>")
+	reply, ok := extractStructuredReply("final: <final>Trim to the point.</final>")
 	if !ok || reply != "Trim to the point." {
 		t.Fatalf("unexpected final-prefix unwrap %#v ok=%t", reply, ok)
 	}
 
-	reply, ok = extractOpenFinalRemainder("<final>\nKeep the thread alive.\n</final>")
+	reply, ok = extractOpenFinalReply("<final>\nKeep the thread alive.\n</final>")
 	if !ok || reply != "Keep the thread alive." {
 		t.Fatalf("unexpected closed final remainder %#v ok=%t", reply, ok)
 	}
 }
 
-func TestLooksLikeStructuredWrapper(t *testing.T) {
+func TestExtractStructuredReplyRejectsPlainWrappers(t *testing.T) {
 	t.Parallel()
 
-	testCases := []struct {
-		input string
-		want  bool
-	}{
-		{input: "", want: false},
-		{input: `{"text":"<final>json should route through json extraction"}`, want: false},
-		{input: "response: <final>hello", want: true},
-		{input: "plain text\n<final>\nhello", want: true},
-		{input: "just plain text", want: false},
-	}
-
-	for _, testCase := range testCases {
-		if got := looksLikeStructuredWrapper(testCase.input); got != testCase.want {
-			t.Fatalf("looksLikeStructuredWrapper(%q) = %t, want %t", testCase.input, got, testCase.want)
-		}
+	if _, ok := extractStructuredReply("response: hello"); ok {
+		t.Fatal("did not expect plain wrapper text to be treated as structured")
 	}
 }
