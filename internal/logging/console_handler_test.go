@@ -104,6 +104,18 @@ func TestConsoleHelpers(t *testing.T) {
 	if got := applyStyle("text", true, ansiRed); got != ansiRed+"text"+ansiReset {
 		t.Fatalf("applyStyle() = %q", got)
 	}
+	if got := attrKey("note", nil); got != "note" {
+		t.Fatalf("attrKey() = %q, want %q", got, "note")
+	}
+	if got := attrKey("note", []string{"ctx", "meta"}); got != "ctx.meta.note" {
+		t.Fatalf("attrKey() = %q, want %q", got, "ctx.meta.note")
+	}
+	if got := extendGroups([]string{"ctx"}, ""); len(got) != 1 || got[0] != "ctx" {
+		t.Fatalf("extendGroups() with empty key = %#v", got)
+	}
+	if got := extendGroups([]string{"ctx"}, "meta"); len(got) != 2 || got[1] != "meta" {
+		t.Fatalf("extendGroups() with key = %#v", got)
+	}
 }
 
 func TestConsoleCategoryAndLevelHelpers(t *testing.T) {
