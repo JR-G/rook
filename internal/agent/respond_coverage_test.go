@@ -33,7 +33,7 @@ func TestRespondHandlesEmbedFailureAndChatFailure(t *testing.T) {
 		case testAgentChatEndpoint:
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"ok"}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>ok</final>"}}`)),
 				Header:     make(http.Header),
 			}, nil
 		default:
@@ -158,7 +158,7 @@ func TestChatWithFallbackSuccessAfterPrimaryModelMiss(t *testing.T) {
 
 		return &http.Response{
 			StatusCode: http.StatusOK,
-			Body:       io.NopCloser(strings.NewReader(`{"model":"phi4-mini","message":{"content":"ok"}}`)),
+			Body:       io.NopCloser(strings.NewReader(`{"model":"phi4-mini","message":{"content":"<final>ok</final>"}}`)),
 			Header:     make(http.Header),
 		}, nil
 	}))

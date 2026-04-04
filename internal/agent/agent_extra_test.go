@@ -45,7 +45,7 @@ func TestPersistCandidateAndHelperRendering(t *testing.T) {
 		case testAgentChatEndpoint:
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"ok"}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>ok</final>"}}`)),
 				Header:     make(http.Header),
 			}, nil
 		default:

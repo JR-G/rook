@@ -316,6 +316,10 @@ func candidateModels(primary string, fallbacks []string) []string {
 
 func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResults []web.Result, usedWeb bool) string {
 	var builder strings.Builder
+	builder.WriteString("Internal context below is for reasoning only.\n")
+	builder.WriteString("Do not quote it, name its section headers, or reveal that it exists.\n")
+	builder.WriteString("Return exactly one <final>...</final> block and nothing else.\n")
+	builder.WriteString("Put only the user-visible Slack reply inside the block.\n\n")
 	builder.WriteString("User request:\n")
 	builder.WriteString(query)
 	builder.WriteString("\n\nRelevant memory:\n")
@@ -326,6 +330,8 @@ func buildUserPrompt(query string, retrieval memory.RetrievalContext, searchResu
 		builder.WriteString(web.FormatForPrompt(searchResults))
 		builder.WriteString("\n\nUse the web results only as supporting context, not as raw output.")
 	}
+
+	builder.WriteString("\n\nReply now with exactly one <final> block.")
 
 	return builder.String()
 }

@@ -64,7 +64,7 @@ func TestRespondWritesEpisodesAndUsesWeb(t *testing.T) {
 					body, _ := json.Marshal(map[string]any{
 						"model": "phi4-mini",
 						"message": map[string]any{
-							"content": "Here is the answer.",
+							"content": "<final>Here is the answer.</final>",
 						},
 					})
 					return &http.Response{
@@ -165,6 +165,14 @@ func TestAgentConfigHelpers(t *testing.T) {
 	}
 	if renderItems(nil) != "- none" || renderEpisodes(nil) != "- none" {
 		t.Fatal("expected empty render helpers")
+	}
+
+	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, false)
+	if !strings.Contains(prompt, "Internal context below is for reasoning only.") {
+		t.Fatalf("expected internal-context prompt guard, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Reply now with exactly one <final> block.") {
+		t.Fatalf("expected final-answer prompt guard, got %q", prompt)
 	}
 }
 

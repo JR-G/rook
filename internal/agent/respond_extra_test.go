@@ -67,7 +67,7 @@ func TestRespondErrorAndNoticeBranches(t *testing.T) {
 		case "/api/chat":
 			return &http.Response{
 				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"Already noted.\n\nLive web lookup used."}}`)),
+				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>Already noted.\n\nLive web lookup used.</final>"}}`)),
 				Header:     make(http.Header),
 			}, nil
 		case "/api/embed":
@@ -127,7 +127,7 @@ func TestRespondErrorAndNoticeBranches(t *testing.T) {
 			Transport: roundTripFunc(func(*http.Request) (*http.Response, error) {
 				return &http.Response{
 					StatusCode: http.StatusOK,
-					Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"ok"}}`)),
+					Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"<final>ok</final>"}}`)),
 					Header:     make(http.Header),
 				}, nil
 			}),
