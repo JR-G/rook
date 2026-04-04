@@ -3,6 +3,7 @@
 Primary workflow:
 
 ```bash
+task slack-keychain-store
 task build
 task run
 task test
@@ -20,6 +21,7 @@ The Slack bot exposes runtime commands in chat:
 - `remind`
 
 launchd assets live in `launchd/` and `scripts/install-launchd.sh`.
+The launchd service starts `scripts/run-rook.sh`, which reads Slack tokens from macOS Keychain and exports them as `ROOK_SLACK_*` environment variables before executing the Go binary.
 
 Install and load the agent:
 

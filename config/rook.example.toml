@@ -5,6 +5,7 @@ data_dir = "./data"
 timezone = "UTC"
 
 [slack]
+# Leave these blank when using macOS Keychain via `task slack-keychain-store`.
 bot_token = ""
 app_token = ""
 allow_dm = true

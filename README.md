@@ -8,11 +8,14 @@
 cd rook
 ./scripts/install.sh
 
-# Fill in Slack and Ollama settings.
+# Fill in non-secret Slack and Ollama settings.
 cp config/rook.example.toml config/rook.toml
 
+# Store Slack tokens in macOS Keychain.
+task slack-keychain-store
+
 task build
-./bin/rook serve -config config/rook.toml
+task run
 ```
 
 For launchd installation:
@@ -33,6 +36,7 @@ task launchd-install
 ## Open-Source Safety
 
 - No secrets are committed; tokens live in local config or environment variables.
+- Slack tokens can be stored in macOS Keychain and injected at runtime.
 - Identity seed files are generic and contain no personal defaults.
 - Memory stays local in SQLite.
 - Web retrieval is optional and disabled by default.
@@ -40,11 +44,12 @@ task launchd-install
 
 ## Defaults
 
-- Chat model: `phi4-mini`
+- Chat model: `qwen3:4b`
+- Chat fallback model: `phi4-mini`
 - Embedding model: `nomic-embed-text`
 - Web provider: disabled by default, optional `duckduckgo`
 
-The default model choice is deliberate: `phi4-mini` is small enough for an 8 GB Mac mini, but it should be treated as a retrieval-augmented local assistant rather than a model with deep factual storage on its own. `rook` therefore separates:
+The default model choice is deliberate: `qwen3:4b` gives a stronger small-model assistant baseline on an 8 GB Mac mini, with `phi4-mini` kept as a conservative local fallback. `rook` therefore separates:
 
 - local model reasoning
 - local memory retrieval

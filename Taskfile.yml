@@ -12,7 +12,12 @@ tasks:
     desc: Build and run rook with the local config
     deps: [build]
     cmds:
-      - ./bin/rook serve -config config/rook.toml
+      - ./scripts/run-rook.sh config/rook.toml
+
+  slack-keychain-store:
+    desc: Store the Slack bot and app tokens in macOS Keychain
+    cmds:
+      - ./scripts/store-slack-tokens.sh
 
   launchd-install:
     desc: Install the launchd agent for rook
