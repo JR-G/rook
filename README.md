@@ -2,30 +2,64 @@
 
 `rook` is a local always-on Slack agent for a Mac mini. It runs as a separate Go service, uses a local Ollama model for inference, stores memory in SQLite, and stays operationally independent from `squad0`.
 
+## Prerequisites
+
+- macOS on Apple Silicon
+- [Go 1.22+](https://go.dev/dl/)
+- [Task](https://taskfile.dev/) (task runner)
+- [Ollama](https://ollama.com/download) (local model server)
+
 ## Quick start
+
+### 1. Install Ollama and pull models
+
+```bash
+# Install or update Ollama (gemma4 requires a recent version).
+brew install ollama
+
+# Start the Ollama server (runs in the background).
+ollama serve &
+
+# Pull the default chat and embedding models.
+ollama pull gemma4:e4b
+ollama pull nomic-embed-text
+```
+
+### 2. Set up rook
 
 ```bash
 cd rook
 ./scripts/install.sh
 
-# Fill in non-secret Slack and Ollama settings.
-cp config/rook.example.toml config/rook.toml
+# Edit config/rook.toml with your timezone and any other preferences.
+# Slack tokens and channel IDs are the main things to configure.
+$EDITOR config/rook.toml
+```
 
-# Store Slack tokens in macOS Keychain.
+### 3. Configure Slack tokens
+
+```bash
+# Store Slack bot and app tokens in macOS Keychain.
 task slack-keychain-store
 
 # If Keychain is locked:
 security unlock-keychain ~/Library/Keychains/login.keychain-db
+```
 
+### 4. Build and run
+
+```bash
 task build
 task run
 ```
 
-For launchd installation:
+### 5. (Optional) Install as a launchd service
 
 ```bash
 task launchd-install
 ```
+
+This starts rook automatically on login and restarts it on failure.
 
 ## Design
 
@@ -33,7 +67,7 @@ task launchd-install
 - Local-first inference through Ollama over `localhost`
 - SQLite memory with embeddings, consolidation, decay, and persona layers
 - Ambient observation of other Slack agents without depending on their internals
-- Scheduled autonomous posts such as a Friday 10:00 weeknote summary
+- Autonomous self-reflection loop and scheduled weeknote summaries
 - Explicit tool boundary for web retrieval
 - Slack-level observation boundary for `squad0`
 - launchd-friendly single binary deployment
@@ -49,16 +83,12 @@ task launchd-install
 
 ## Defaults
 
-- Chat model: `qwen3:4b`
-- Chat fallback model: `phi4-mini`
+- Chat model: `gemma4:e4b` (Google Gemma 4, 4.5B effective parameters)
+- Chat fallback model: `qwen3:4b`
 - Embedding model: `nomic-embed-text`
 - Web provider: disabled by default, optional `duckduckgo`
 
-The default model choice is deliberate: `qwen3:4b` gives a stronger small-model assistant baseline on an 8 GB Mac mini, with `phi4-mini` kept as a conservative local fallback. `rook` therefore separates:
-
-- local model reasoning
-- local memory retrieval
-- optional live web retrieval when freshness matters
+`gemma4:e4b` runs comfortably on an 8 GB Mac mini and offers native structured output, function calling, and strong conversational quality for its size. `qwen3:4b` is kept as a fallback.
 
 ## Docs
 
@@ -69,4 +99,4 @@ The default model choice is deliberate: `qwen3:4b` gives a stronger small-model 
 
 ## Status
 
-This repo is intended to run locally on macOS Apple Silicon. The default chat model is conservative for an M1 Mac mini with 8 GB RAM, and can be changed in the config.
+This repo is intended to run locally on macOS Apple Silicon. The default chat model fits an M-series Mac mini with 8 GB RAM and can be changed in the config.
