@@ -6,3 +6,4 @@ data/
 config/rook.toml
 .task/
 .DS_Store
+.claude/
