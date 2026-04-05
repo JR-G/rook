@@ -292,7 +292,7 @@ func TestSeedSnapshotAndConsolidateErrorBranches(t *testing.T) {
 }
 
 func storeDB(store *memory.Store) *sql.DB {
-	field := reflect.ValueOf(store).Elem().FieldByName("db")
+	field := reflect.ValueOf(store).Elem().FieldByName("writer")
 	opened := reflect.NewAt(field.Type(), unsafe.Pointer(field.UnsafeAddr())).Elem().Interface()
 	database, ok := opened.(*sql.DB)
 	if !ok {

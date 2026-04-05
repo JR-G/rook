@@ -25,52 +25,75 @@ func OpenWithClock(path string, now func() time.Time) (*Store, error) {
 		return nil, err
 	}
 
-	db, err := sql.Open("sqlite", path)
+	writer, err := sql.Open("sqlite", path)
 	if err != nil {
 		return nil, err
 	}
+	writer.SetMaxOpenConns(1)
 
-	store := &Store{db: db, now: now}
+	reader, err := sql.Open("sqlite", path+"?mode=ro")
+	if err != nil {
+		_ = writer.Close()
+		return nil, err
+	}
+
+	store := &Store{writer: writer, reader: reader, now: now}
 	if err := store.configure(); err != nil {
-		_ = db.Close()
+		_ = writer.Close()
+		_ = reader.Close()
 		return nil, err
 	}
 
 	if err := store.migrate(); err != nil {
-		_ = db.Close()
+		_ = writer.Close()
+		_ = reader.Close()
 		return nil, err
 	}
 
 	return store, nil
 }
 
-// Close closes the underlying database.
+// Close closes the underlying database connections.
 func (s *Store) Close() error {
-	if s == nil || s.db == nil {
+	if s == nil {
 		return nil
 	}
 
-	return s.db.Close()
+	readerErr := closeDB(s.reader)
+	writerErr := closeDB(s.writer)
+	if readerErr != nil {
+		return readerErr
+	}
+
+	return writerErr
+}
+
+func closeDB(db *sql.DB) error {
+	if db == nil {
+		return nil
+	}
+
+	return db.Close()
 }
 
 // Health reports basic store reachability and counts.
 func (s *Store) Health(ctx context.Context) (Health, error) {
-	if err := s.db.PingContext(ctx); err != nil {
+	if err := s.reader.PingContext(ctx); err != nil {
 		return Health{Reachable: false}, err
 	}
 
 	var memoryCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_items WHERE archived_at IS NULL`).Scan(&memoryCount); err != nil {
+	if err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_items WHERE archived_at IS NULL`).Scan(&memoryCount); err != nil {
 		return Health{}, err
 	}
 
 	var episodeCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM episodes`).Scan(&episodeCount); err != nil {
+	if err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM episodes`).Scan(&episodeCount); err != nil {
 		return Health{}, err
 	}
 
 	var reminderCount int
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM reminders WHERE sent_at IS NULL`).Scan(&reminderCount); err != nil {
+	if err := s.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM reminders WHERE sent_at IS NULL`).Scan(&reminderCount); err != nil {
 		return Health{}, err
 	}
 
@@ -87,7 +110,7 @@ func (s *Store) RecordEpisode(ctx context.Context, input EpisodeInput) (Episode,
 	now := s.now().UTC()
 	summary := summarise(input.Text, 240)
 
-	result, err := s.db.ExecContext(ctx, `
+	result, err := s.writer.ExecContext(ctx, `
 		INSERT INTO episodes (
 			channel_id, thread_ts, user_id, role, source, text, summary, created_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -130,7 +153,7 @@ func (s *Store) PruneEpisodes(ctx context.Context, retentionDays int) error {
 	}
 
 	cutoff := s.now().UTC().AddDate(0, 0, -retentionDays)
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		DELETE FROM episodes
 		WHERE created_at < ?
 	`,
@@ -143,7 +166,7 @@ func (s *Store) PruneEpisodes(ctx context.Context, retentionDays int) error {
 // Decay archives low-importance stale memories.
 func (s *Store) Decay(ctx context.Context) error {
 	cutoff := s.now().UTC().AddDate(0, 0, -120)
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE memory_items
 		SET archived_at = ?
 		WHERE archived_at IS NULL
@@ -194,7 +217,7 @@ func (s *Store) configure() error {
 		`PRAGMA busy_timeout = 5000;`,
 	}
 	for _, statement := range statements {
-		if _, err := s.db.Exec(statement); err != nil {
+		if _, err := s.writer.Exec(statement); err != nil {
 			return err
 		}
 	}
@@ -274,7 +297,7 @@ func (s *Store) migrate() error {
 	}
 
 	for _, statement := range statements {
-		if _, err := s.db.Exec(statement); err != nil {
+		if _, err := s.writer.Exec(statement); err != nil {
 			return err
 		}
 	}

@@ -56,7 +56,7 @@ func (s *Store) SearchMemories(ctx context.Context, query string, queryEmbedding
 
 // ListRecentMemories returns recently updated durable memories.
 func (s *Store) ListRecentMemories(ctx context.Context, limit int) ([]Item, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
 		FROM memory_items
@@ -129,7 +129,7 @@ func (s *Store) ThreadEpisodes(ctx context.Context, channelID, threadTS string, 
 		return nil, nil
 	}
 
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, channel_id, thread_ts, user_id, role, source, text, summary, created_at
 		FROM episodes
 		WHERE channel_id = ?
@@ -183,7 +183,7 @@ func (s *Store) ThreadEpisodes(ctx context.Context, channelID, threadTS string, 
 // HasAssistantReplyInThread reports whether rook has already replied in a thread.
 func (s *Store) HasAssistantReplyInThread(ctx context.Context, channelID, threadTS string) (bool, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `
+	if err := s.reader.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM episodes
 		WHERE channel_id = ?

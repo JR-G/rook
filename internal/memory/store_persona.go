@@ -19,7 +19,7 @@ func (s *Store) EnsurePersonaLayer(ctx context.Context, layer, content, source s
 	}
 
 	now := s.now().UTC()
-	_, err = s.db.ExecContext(ctx, `
+	_, err = s.writer.ExecContext(ctx, `
 		INSERT INTO persona_profiles (layer, revision, content, updated_at)
 		VALUES (?, 1, ?, ?)
 	`,
@@ -38,7 +38,7 @@ func (s *Store) EnsurePersonaLayer(ctx context.Context, layer, content, source s
 func (s *Store) GetPersonaLayer(ctx context.Context, layer string) (PersonaProfile, error) {
 	var profile PersonaProfile
 	var updatedAt string
-	err := s.db.QueryRowContext(ctx, `
+	err := s.writer.QueryRowContext(ctx, `
 		SELECT layer, revision, content, updated_at
 		FROM persona_profiles
 		WHERE layer = ?
@@ -70,7 +70,7 @@ func (s *Store) UpdatePersonaLayer(ctx context.Context, layer, content, reason, 
 
 	nextRevision := current.Revision + 1
 	now := s.now().UTC()
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := s.writer.ExecContext(ctx, `
 		UPDATE persona_profiles
 		SET revision = ?, content = ?, updated_at = ?
 		WHERE layer = ?
@@ -96,7 +96,7 @@ func (s *Store) UpdatePersonaLayer(ctx context.Context, layer, content, reason, 
 }
 
 func (s *Store) insertPersonaRevision(ctx context.Context, layer string, revision int, content, reason, source string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO persona_revisions (layer, revision, content, reason, source, created_at)
 		VALUES (?, ?, ?, ?, ?, ?)
 	`,

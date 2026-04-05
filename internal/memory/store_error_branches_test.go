@@ -14,7 +14,7 @@ func TestMalformedRowsSurfaceFromStoreQueries(t *testing.T) {
 
 	memoryStore := newTestStore(t, time.Now)
 	t.Cleanup(func() { _ = memoryStore.Close() })
-	_, err := memoryStore.db.ExecContext(ctx, `
+	_, err := memoryStore.writer.ExecContext(ctx, `
 		INSERT INTO memory_items (
 			type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
@@ -49,7 +49,7 @@ func TestMalformedRowsSurfaceFromStoreQueries(t *testing.T) {
 
 	episodeStore := newTestStore(t, time.Now)
 	t.Cleanup(func() { _ = episodeStore.Close() })
-	_, err = episodeStore.db.ExecContext(ctx, `
+	_, err = episodeStore.writer.ExecContext(ctx, `
 		INSERT INTO episodes (
 			channel_id, thread_ts, user_id, role, source, text, summary, created_at
 		) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
@@ -79,7 +79,7 @@ func TestPersonaParsingMergeAndStoreErrorBranches(t *testing.T) {
 
 	personaStore := newTestStore(t, time.Now)
 	t.Cleanup(func() { _ = personaStore.Close() })
-	_, err := personaStore.db.ExecContext(ctx, `
+	_, err := personaStore.writer.ExecContext(ctx, `
 		INSERT INTO persona_profiles (layer, revision, content, updated_at)
 		VALUES (?, ?, ?, ?)
 	`,
@@ -160,7 +160,7 @@ func TestHealthAndMigrateDirectFailures(t *testing.T) {
 	ctx := context.Background()
 	store := newTestStore(t, time.Now)
 
-	if _, err := store.db.ExecContext(ctx, `DROP TABLE memory_items`); err != nil {
+	if _, err := store.writer.ExecContext(ctx, `DROP TABLE memory_items`); err != nil {
 		t.Fatalf("drop memory_items table: %v", err)
 	}
 	if _, err := store.Health(ctx); err == nil {
@@ -169,14 +169,14 @@ func TestHealthAndMigrateDirectFailures(t *testing.T) {
 
 	episodeStore := newTestStore(t, time.Now)
 	t.Cleanup(func() { _ = episodeStore.Close() })
-	if _, err := episodeStore.db.ExecContext(ctx, `DROP TABLE episodes`); err != nil {
+	if _, err := episodeStore.writer.ExecContext(ctx, `DROP TABLE episodes`); err != nil {
 		t.Fatalf("drop episodes table: %v", err)
 	}
 	if _, err := episodeStore.Health(ctx); err == nil {
 		t.Fatal("expected Health to fail when episodes table is missing")
 	}
 
-	if _, err := store.db.ExecContext(ctx, `DROP TABLE reminders`); err != nil {
+	if _, err := store.writer.ExecContext(ctx, `DROP TABLE reminders`); err != nil {
 		t.Fatalf("drop reminders table: %v", err)
 	}
 	if _, err := store.Health(ctx); err == nil {
@@ -219,7 +219,7 @@ func TestExtractorScoringAndWriteFailureBranches(t *testing.T) {
 
 	insertStore := newTestStore(t, func() time.Time { return currentTime })
 	t.Cleanup(func() { _ = insertStore.Close() })
-	if _, err := insertStore.db.ExecContext(ctx, `DROP TABLE memory_events`); err != nil {
+	if _, err := insertStore.writer.ExecContext(ctx, `DROP TABLE memory_events`); err != nil {
 		t.Fatalf("drop memory_events table: %v", err)
 	}
 	if _, err := insertStore.insertMemory(ctx, Candidate{
@@ -251,7 +251,7 @@ func TestExtractorScoringAndWriteFailureBranches(t *testing.T) {
 	if err != nil {
 		t.Fatalf("seed merge memory: %v", err)
 	}
-	if _, err := mergeStore.db.ExecContext(ctx, `DROP TABLE memory_events`); err != nil {
+	if _, err := mergeStore.writer.ExecContext(ctx, `DROP TABLE memory_events`); err != nil {
 		t.Fatalf("drop memory_events table: %v", err)
 	}
 	if _, err := mergeStore.mergeMemory(ctx, existing, Candidate{
@@ -270,7 +270,7 @@ func TestExtractorScoringAndWriteFailureBranches(t *testing.T) {
 	if err := personaStore.EnsurePersonaLayer(ctx, "stable_identity", "seed", "test"); err != nil {
 		t.Fatalf("ensure persona layer: %v", err)
 	}
-	if _, err := personaStore.db.ExecContext(ctx, `DROP TABLE persona_revisions`); err != nil {
+	if _, err := personaStore.writer.ExecContext(ctx, `DROP TABLE persona_revisions`); err != nil {
 		t.Fatalf("drop persona_revisions table: %v", err)
 	}
 	if _, err := personaStore.UpdatePersonaLayer(ctx, "stable_identity", "next", "reason", "test"); err == nil {

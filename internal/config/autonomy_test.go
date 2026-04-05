@@ -1,6 +1,9 @@
 package config
 
-import "testing"
+import (
+	"testing"
+	"time"
+)
 
 func TestAutonomyDefaultsAndValidation(t *testing.T) {
 	t.Parallel()
@@ -14,6 +17,9 @@ func TestAutonomyDefaultsAndValidation(t *testing.T) {
 	}
 	if cfg.Autonomy.PollInterval.String() != "1m0s" && cfg.Autonomy.PollInterval.String() != "1m" {
 		t.Fatalf("unexpected default autonomy poll interval %q", cfg.Autonomy.PollInterval)
+	}
+	if cfg.Autonomy.ReflectionInterval.Duration != 24*time.Hour {
+		t.Fatalf("unexpected default reflection interval %v", cfg.Autonomy.ReflectionInterval)
 	}
 
 	cfg.Autonomy.WeeknotesEnabled = true
@@ -30,6 +36,17 @@ func TestAutonomyDefaultsAndValidation(t *testing.T) {
 	cfg.Autonomy.WeeknotePostTime = "09:30"
 	if err := validate(cfg); err != nil {
 		t.Fatalf("expected valid autonomy config, got %v", err)
+	}
+
+	cfg.Autonomy.ReflectionEnabled = true
+	cfg.Autonomy.ReflectionInterval = Duration{}
+	if err := validate(cfg); err == nil {
+		t.Fatal("expected zero reflection interval to fail validation")
+	}
+
+	cfg.Autonomy.ReflectionInterval = Duration{Duration: 24 * time.Hour}
+	if err := validate(cfg); err != nil {
+		t.Fatalf("expected valid reflection config, got %v", err)
 	}
 }
 
@@ -55,5 +72,15 @@ func TestParseClockHHMMAndEnvOverrides(t *testing.T) {
 	}
 	if cfg.Autonomy.WeeknotePostTime != "11:45" {
 		t.Fatalf("unexpected env weeknote post time %q", cfg.Autonomy.WeeknotePostTime)
+	}
+
+	t.Setenv("ROOK_AUTONOMY_REFLECTION_CHANNEL", "C-REFLECT")
+	t.Setenv("ROOK_OLLAMA_CHAT_FALLBACK_MODELS", "model-a, model-b")
+	applyEnv(&cfg)
+	if cfg.Autonomy.ReflectionChannel != "C-REFLECT" {
+		t.Fatalf("unexpected env reflection channel %q", cfg.Autonomy.ReflectionChannel)
+	}
+	if len(cfg.Ollama.ChatFallbacks) != 2 || cfg.Ollama.ChatFallbacks[0] != "model-a" {
+		t.Fatalf("unexpected env chat fallbacks %v", cfg.Ollama.ChatFallbacks)
 	}
 }

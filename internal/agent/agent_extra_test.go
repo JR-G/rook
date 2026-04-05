@@ -142,7 +142,10 @@ func TestChatFallbackAndWebHelpers(t *testing.T) {
 		t.Fatalf("expected failing searcher to be ignored, got %#v used=%t", results, used)
 	}
 
-	models := candidateModels("qwen3:4b", []string{"phi4-mini", "qwen3:4b", "phi4-mini"})
+	if candidateModels("  ", nil) != nil {
+		t.Fatal("expected blank primary to return nil")
+	}
+	models := candidateModels("qwen3:4b", []string{"phi4-mini", "qwen3:4b", "phi4-mini", "", "  "})
 	if len(models) != 2 || models[1] != "phi4-mini" {
 		t.Fatalf("unexpected candidate models %#v", models)
 	}

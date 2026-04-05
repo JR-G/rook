@@ -14,7 +14,7 @@ func (s *Store) insertMemory(
 	embeddingJSON string,
 	now time.Time,
 ) (Item, error) {
-	result, err := s.db.ExecContext(ctx, `
+	result, err := s.writer.ExecContext(ctx, `
 		INSERT INTO memory_items (
 			type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
@@ -86,7 +86,7 @@ func (s *Store) mergeMemory(ctx context.Context, existing Item, candidate Candid
 		return Item{}, err
 	}
 
-	if _, err := s.db.ExecContext(ctx, `
+	if _, err := s.writer.ExecContext(ctx, `
 		UPDATE memory_items
 		SET body = ?, keywords = ?, confidence = ?, importance = ?, embedding = ?, source = ?,
 			updated_at = ?, last_seen_at = ?
@@ -121,7 +121,7 @@ func (s *Store) mergeMemory(ctx context.Context, existing Item, candidate Candid
 }
 
 func (s *Store) logMemoryEvent(ctx context.Context, memoryID int64, eventType, detail string) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		INSERT INTO memory_events (memory_id, event_type, detail, created_at)
 		VALUES (?, ?, ?, ?)
 	`,

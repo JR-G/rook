@@ -10,7 +10,7 @@ import (
 )
 
 func (s *Store) lookupItem(ctx context.Context, memoryType Type, scope, subject string) (Item, error) {
-	row := s.db.QueryRowContext(ctx, `
+	row := s.writer.QueryRowContext(ctx, `
 		SELECT id, type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
 		FROM memory_items
@@ -30,7 +30,7 @@ func (s *Store) lookupItem(ctx context.Context, memoryType Type, scope, subject 
 }
 
 func (s *Store) loadItems(ctx context.Context) ([]Item, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, type, scope, subject, body, keywords, confidence, importance, embedding, source,
 			created_at, updated_at, last_seen_at
 		FROM memory_items
@@ -58,7 +58,7 @@ func (s *Store) loadItems(ctx context.Context) ([]Item, error) {
 }
 
 func (s *Store) loadEpisodes(ctx context.Context, limit int) ([]Episode, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, channel_id, thread_ts, user_id, role, source, text, summary, created_at
 		FROM episodes
 		ORDER BY created_at DESC

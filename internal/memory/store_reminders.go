@@ -9,7 +9,7 @@ import (
 // AddReminder creates a persisted reminder.
 func (s *Store) AddReminder(ctx context.Context, input ReminderInput) (Reminder, error) {
 	now := s.now().UTC()
-	result, err := s.db.ExecContext(ctx, `
+	result, err := s.writer.ExecContext(ctx, `
 		INSERT INTO reminders (
 			channel_id, thread_ts, message, due_at, created_by, created_at
 		) VALUES (?, ?, ?, ?, ?, ?)
@@ -43,7 +43,7 @@ func (s *Store) AddReminder(ctx context.Context, input ReminderInput) (Reminder,
 
 // DueReminders returns reminders that should fire now.
 func (s *Store) DueReminders(ctx context.Context, now time.Time, limit int) ([]Reminder, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.reader.QueryContext(ctx, `
 		SELECT id, channel_id, thread_ts, message, due_at, created_by, created_at, sent_at
 		FROM reminders
 		WHERE sent_at IS NULL
@@ -75,7 +75,7 @@ func (s *Store) DueReminders(ctx context.Context, now time.Time, limit int) ([]R
 
 // MarkReminderSent marks a reminder as delivered.
 func (s *Store) MarkReminderSent(ctx context.Context, reminderID int64, sentAt time.Time) error {
-	_, err := s.db.ExecContext(ctx, `
+	_, err := s.writer.ExecContext(ctx, `
 		UPDATE reminders
 		SET sent_at = ?
 		WHERE id = ?
@@ -90,7 +90,7 @@ func (s *Store) MarkReminderSent(ctx context.Context, reminderID int64, sentAt t
 // PendingReminderCount returns the number of outstanding reminders.
 func (s *Store) PendingReminderCount(ctx context.Context) (int, error) {
 	var count int
-	if err := s.db.QueryRowContext(ctx, `
+	if err := s.reader.QueryRowContext(ctx, `
 		SELECT COUNT(*)
 		FROM reminders
 		WHERE sent_at IS NULL

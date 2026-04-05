@@ -21,6 +21,29 @@ func TestOpenWithClockFailureAndHealthBranches(t *testing.T) {
 		t.Fatal("expected mkdir failure for invalid db parent")
 	}
 
+	var nilStore *Store
+	if err := nilStore.Close(); err != nil {
+		t.Fatalf("expected nil store close to succeed: %v", err)
+	}
+	if err := closeDB(nil); err != nil {
+		t.Fatalf("expected closeDB(nil) to succeed: %v", err)
+	}
+
+	closedStore := newTestStore(t, time.Now)
+	if err := closedStore.Close(); err != nil {
+		t.Fatalf("expected first close to succeed: %v", err)
+	}
+
+	emptyStore := &Store{}
+	if err := emptyStore.Close(); err != nil {
+		t.Fatalf("expected empty store close to succeed: %v", err)
+	}
+
+	goodStore := newTestStore(t, time.Now)
+	if err := goodStore.Close(); err != nil {
+		t.Fatalf("expected clean close to succeed: %v", err)
+	}
+
 	now := time.Date(2026, time.April, 1, 10, 0, 0, 0, time.UTC)
 	store := newTestStore(t, func() time.Time { return now })
 	t.Cleanup(func() { _ = store.Close() })
@@ -190,7 +213,7 @@ func TestInsertMemoryRecordEpisodeAndReminderCounts(t *testing.T) {
 		t.Fatalf("insert memory: %v", err)
 	}
 	var eventCount int
-	if err := store.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_events WHERE memory_id = ?`, item.ID).Scan(&eventCount); err != nil {
+	if err := store.reader.QueryRowContext(ctx, `SELECT COUNT(*) FROM memory_events WHERE memory_id = ?`, item.ID).Scan(&eventCount); err != nil {
 		t.Fatalf("query memory events: %v", err)
 	}
 	if eventCount != 1 {

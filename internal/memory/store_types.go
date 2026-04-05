@@ -145,7 +145,11 @@ type Health struct {
 }
 
 // Store manages all local persistence.
+// It uses separate connections for reads and writes to avoid SQLite lock contention
+// under concurrent load. The writer connection has max_open_conns=1 so all writes
+// are serialised. The reader connection uses WAL mode for non-blocking concurrent reads.
 type Store struct {
-	db  *sql.DB
-	now func() time.Time
+	writer *sql.DB
+	reader *sql.DB
+	now    func() time.Time
 }
