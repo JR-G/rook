@@ -46,12 +46,13 @@ task slack-keychain-store
 security unlock-keychain ~/Library/Keychains/login.keychain-db
 ```
 
-### 4. Build and run
+### 4. Run
 
 ```bash
-task build
 task run
 ```
+
+This builds the binary and starts rook via `scripts/run-rook.sh`, which loads Slack tokens from macOS Keychain automatically.
 
 ### 5. (Optional) Install as a launchd service
 

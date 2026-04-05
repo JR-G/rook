@@ -4,8 +4,7 @@ Primary workflow:
 
 ```bash
 task slack-keychain-store
-task build
-task run
+task run    # builds and starts rook, loading Slack tokens from Keychain
 task test
 task lint
 ```
@@ -41,7 +40,6 @@ The launchd service starts `scripts/run-rook.sh`, which reads Slack tokens from 
 Install and load the agent:
 
 ```bash
-task build
-./scripts/install-launchd.sh
+task launchd-install
 launchctl list | grep io.rook.agent
 ```

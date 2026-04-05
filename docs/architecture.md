@@ -18,7 +18,7 @@ The runtime keeps internal events, logs, search results, and memory writes separ
 
 ## Model Posture
 
-`rook` defaults to `qwen3:4b` with `phi4-mini` as a local fallback for reliability on small Apple Silicon machines. The design assumes the model is capable but capacity-constrained: it should reason locally, but it should not be trusted as the sole factual store. For that reason:
+`rook` defaults to `gemma4:e4b` with `qwen3:4b` as a local fallback for reliability on small Apple Silicon machines. The design assumes the model is capable but capacity-constrained: it should reason locally, but it should not be trusted as the sole factual store. For that reason:
 
 - durable personal context lives in SQLite memory
 - relevant memory is retrieved into the prompt
@@ -32,4 +32,5 @@ Autonomy is opt-in and local-first:
 - ambient agent messages can be observed and stored as episodes without auto-replying
 - scheduled jobs run inside the same long-lived service
 - the first built-in scheduled task is a Friday 10:00 weeknote summary for a configured Slack channel
+- a daily self-reflection loop reviews recent episodes and records observations about patterns and gaps
 - proactive behavior is constrained by the same persona, output, and memory boundaries as direct replies
