@@ -10,7 +10,6 @@ if [ ! -f "$keychain_path" ]; then
   exit 1
 fi
 
-
 store_secret() {
   local account="$1"
   local secret="$2"

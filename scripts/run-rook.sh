@@ -11,36 +11,22 @@ if [ ! -f "$keychain_path" ]; then
   keychain_path=""
 fi
 
-load_keychain_secret() {
-  local account="$1"
-
-  security find-generic-password \
-    -s "$keychain_service" \
-    -a "$account" \
-    ${keychain_path:+"$keychain_path"} \
-    -w 2>/dev/null
-}
-
-export_if_unset() {
-  local env_name="$1"
-  local account="$2"
-  local secret=""
-
-  if [ -n "${!env_name:-}" ]; then
-    return
-  fi
-
-  if secret="$(load_keychain_secret "$account")"; then
-    export "$env_name=$secret"
-  fi
-}
-
 if [ ! -f "$config_path" ]; then
   echo "config file not found: $config_path" >&2
   exit 1
 fi
 
-export_if_unset ROOK_SLACK_BOT_TOKEN bot_token
-export_if_unset ROOK_SLACK_APP_TOKEN app_token
+if [ -z "${ROOK_SLACK_BOT_TOKEN:-}" ] && [ -n "$keychain_path" ]; then
+  export ROOK_SLACK_BOT_TOKEN="$(security find-generic-password -s "$keychain_service" -a bot_token -g "$keychain_path" 2>&1 | grep '^password:' | sed 's/^password: "//' | sed 's/"$//')"
+fi
+
+if [ -z "${ROOK_SLACK_APP_TOKEN:-}" ] && [ -n "$keychain_path" ]; then
+  export ROOK_SLACK_APP_TOKEN="$(security find-generic-password -s "$keychain_service" -a app_token -g "$keychain_path" 2>&1 | grep '^password:' | sed 's/^password: "//' | sed 's/"$//')"
+fi
+
+if [ -z "${ROOK_SLACK_BOT_TOKEN:-}" ] || [ -z "${ROOK_SLACK_APP_TOKEN:-}" ]; then
+  echo "ERROR: Slack tokens not found. Run: task slack-keychain-store" >&2
+  exit 1
+fi
 
 exec "$repo_root/bin/rook" serve -config "$config_path"
