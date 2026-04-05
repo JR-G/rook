@@ -155,7 +155,7 @@ func Default() Config {
 		},
 		Ollama: OllamaConfig{
 			Host:           "http://127.0.0.1:11434",
-			ChatModel:      "gemma4:e4b",
+			ChatModel:      "gemma4:e4b-q4_K_M",
 			ChatFallbacks:  []string{"qwen3:4b"},
 			EmbeddingModel: "nomic-embed-text",
 			Temperature:    0.7,
