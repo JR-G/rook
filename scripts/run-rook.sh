@@ -40,10 +40,6 @@ if [ ! -f "$config_path" ]; then
   exit 1
 fi
 
-if [ -n "$keychain_path" ]; then
-  security unlock-keychain "$keychain_path" 2>/dev/null || true
-fi
-
 export_if_unset ROOK_SLACK_BOT_TOKEN bot_token
 export_if_unset ROOK_SLACK_APP_TOKEN app_token
 
