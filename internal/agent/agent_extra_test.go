@@ -160,6 +160,7 @@ func TestChatFallbackAndWebHelpers(t *testing.T) {
 		"",
 		[]web.Result{{Title: "A", URL: "https://example.com"}},
 		true,
+		nil,
 	)
 	if !strings.Contains(prompt, "Live web results") {
 		t.Fatalf("unexpected user prompt %q", prompt)
@@ -199,6 +200,7 @@ func newAgentTestService(t *testing.T, transport http.RoundTripper) (*Service, *
 		store,
 		personaManager,
 		web.NoopSearcher{},
+		nil,
 		Config{
 			ChatModel:          "qwen3:4b",
 			ChatFallbacks:      []string{"phi4-mini"},

@@ -122,6 +122,7 @@ func TestRespondFailsWhenPersonaPromptCannotRender(t *testing.T) {
 		store,
 		personaManager,
 		web.NoopSearcher{},
+		nil,
 		Config{ChatModel: "qwen3:4b", EmbeddingModel: "nomic-embed-text"},
 	)
 	if _, err := service.Respond(context.Background(), Request{ChannelID: "D1", ThreadTS: "1.0", UserID: "U1", Text: "hello"}); err == nil {

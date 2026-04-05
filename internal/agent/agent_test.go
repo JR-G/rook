@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,6 +91,7 @@ func TestRespondWritesEpisodesAndUsesWeb(t *testing.T) {
 		store,
 		personaManager,
 		stubSearcher{results: []web.Result{{Title: "A", URL: "https://example.com", Snippet: "B"}}},
+		nil,
 		Config{
 			ChatModel:          "phi4-mini",
 			EmbeddingModel:     "nomic-embed-text",
@@ -166,7 +168,7 @@ func TestAgentConfigHelpers(t *testing.T) {
 		t.Fatal("expected empty render helpers")
 	}
 
-	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, "", nil, false)
+	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, "", nil, false, nil)
 	if !strings.Contains(prompt, "Internal context below is for reasoning only.") {
 		t.Fatalf("expected internal-context prompt guard, got %q", prompt)
 	}
@@ -210,6 +212,7 @@ func TestAgentConfigHelpers(t *testing.T) {
 		"",
 		nil,
 		false,
+		nil,
 	)
 	if !strings.Contains(threadPrompt, "Thread continuation instructions:") {
 		t.Fatalf("expected thread continuation instructions in prompt, got %q", threadPrompt)
@@ -228,12 +231,59 @@ func TestAgentConfigHelpers(t *testing.T) {
 		"- local memory db healthy: true\n- durable memory items: 4",
 		nil,
 		false,
+		nil,
 	)
 	if !strings.Contains(memoryPrompt, "Current runtime state:") {
 		t.Fatalf("expected runtime state in memory-self prompt, got %q", memoryPrompt)
 	}
 	if !strings.Contains(memoryPrompt, "If the user asks about your memory, state, or continuity") {
 		t.Fatalf("expected state guidance in prompt, got %q", memoryPrompt)
+	}
+
+	fetchPrompt := buildUserPrompt(
+		"check this https://example.com",
+		memory.RetrievalContext{},
+		nil,
+		"",
+		nil,
+		false,
+		[]fetchedURL{{URL: "https://example.com", Content: "Example page content"}},
+	)
+	if !strings.Contains(fetchPrompt, "Fetched content from https://example.com") {
+		t.Fatalf("expected fetched content in prompt, got %q", fetchPrompt)
+	}
+	if !strings.Contains(fetchPrompt, "Example page content") {
+		t.Fatalf("expected fetched text in prompt, got %q", fetchPrompt)
+	}
+
+	nilFetcherService := &Service{}
+	if fetched := nilFetcherService.fetchURLs(context.Background(), "check https://example.com"); fetched != nil {
+		t.Fatalf("expected nil fetcher to return nil, got %v", fetched)
+	}
+
+	noURLService := &Service{fetcher: web.NewFetcher(time.Second)}
+	if fetched := noURLService.fetchURLs(context.Background(), "no urls here"); fetched != nil {
+		t.Fatalf("expected no URLs to return nil, got %v", fetched)
+	}
+
+	fetchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "text/plain")
+		_, _ = w.Write([]byte("fetched page content"))
+	}))
+	defer fetchServer.Close()
+	fetchService := &Service{fetcher: web.NewFetcher(5 * time.Second)}
+	fetched := fetchService.fetchURLs(context.Background(), "read "+fetchServer.URL+" please")
+	if len(fetched) != 1 || fetched[0].Content != "fetched page content" {
+		t.Fatalf("unexpected fetchURLs result %#v", fetched)
+	}
+
+	badFetchServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer badFetchServer.Close()
+	badFetched := fetchService.fetchURLs(context.Background(), "read "+badFetchServer.URL+" please")
+	if len(badFetched) != 0 {
+		t.Fatalf("expected failed fetch to be skipped, got %#v", badFetched)
 	}
 
 	if trimCurrentUserEcho("anything", nil) != nil {

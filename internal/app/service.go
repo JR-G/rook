@@ -124,6 +124,7 @@ func newAgentService(
 		store,
 		personaManager,
 		buildSearcher(cfg),
+		web.NewFetcher(cfg.Web.Timeout.Duration),
 		agent.Config{
 			ChatModel:          cfg.Ollama.ChatModel,
 			ChatFallbacks:      cfg.Ollama.ChatFallbacks,
