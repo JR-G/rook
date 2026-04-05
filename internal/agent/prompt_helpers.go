@@ -2,18 +2,11 @@ package agent
 
 import (
 	"strings"
-	"unicode"
 
 	"github.com/JR-G/rook/internal/memory"
 )
 
-type queryProfile struct {
-	MetaReflection      bool
-	ShortThreadFollowUp bool
-}
-
 func adjustRetrievalForQuery(
-	query string,
 	channelID string,
 	threadTS string,
 	threadEpisodes []memory.Episode,
@@ -23,18 +16,8 @@ func adjustRetrievalForQuery(
 	if len(threadEpisodes) > 0 {
 		retrieval.Episodes = nil
 	}
-	if analyseQuery(query, threadEpisodes).MetaReflection {
-		retrieval.Episodes = nil
-	}
 
 	return retrieval
-}
-
-func analyseQuery(query string, threadEpisodes []memory.Episode) queryProfile {
-	return queryProfile{
-		MetaReflection:      isMetaReflectionQuery(query),
-		ShortThreadFollowUp: isShortThreadFollowUp(query, threadEpisodes),
-	}
 }
 
 func excludeThreadEpisodes(episodes []memory.Episode, channelID, threadTS string) []memory.Episode {
@@ -51,63 +34,6 @@ func excludeThreadEpisodes(episodes []memory.Episode, channelID, threadTS string
 	}
 
 	return filtered
-}
-
-func isMetaReflectionQuery(query string) bool {
-	lowerQuery := strings.ToLower(strings.TrimSpace(query))
-	if lowerQuery == "" {
-		return false
-	}
-
-	triggers := []string{
-		"how are you",
-		"how are you feeling",
-		"how is it going",
-		"what's on your mind",
-		"what is on your mind",
-		"what do you think",
-		"how do you feel",
-		"what's your view",
-		"what is your view",
-	}
-	for _, trigger := range triggers {
-		if strings.Contains(lowerQuery, trigger) {
-			return true
-		}
-	}
-
-	return false
-}
-
-func isShortThreadFollowUp(query string, threadEpisodes []memory.Episode) bool {
-	if len(threadEpisodes) == 0 || !hasAssistantTurn(threadEpisodes) {
-		return false
-	}
-
-	lowerQuery := strings.ToLower(strings.TrimSpace(query))
-	if lowerQuery == "" {
-		return false
-	}
-
-	wordCount := len(strings.FieldsFunc(lowerQuery, func(char rune) bool {
-		return unicode.IsSpace(char) || strings.ContainsRune("?!.,;:'\"", char)
-	}))
-
-	if wordCount == 0 {
-		return false
-	}
-
-	return wordCount <= 3 || (strings.HasSuffix(lowerQuery, "?") && len(lowerQuery) <= 24)
-}
-
-func hasAssistantTurn(episodes []memory.Episode) bool {
-	for _, episode := range episodes {
-		if episode.Source == roleAssistant {
-			return true
-		}
-	}
-
-	return false
 }
 
 func trimCurrentUserEcho(query string, episodes []memory.Episode) []memory.Episode {

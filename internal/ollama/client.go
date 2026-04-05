@@ -98,15 +98,7 @@ func (c *Client) chatWithFormat(
 	requestCtx, cancel := context.WithTimeout(ctx, c.chatTimeout)
 	defer cancel()
 
-	response, err := c.chatOnce(requestCtx, model, messages, temperature, true, format)
-	if err == nil {
-		return response, nil
-	}
-	if !shouldRetryWithoutThink(model, err) {
-		return ChatResult{}, err
-	}
-
-	return c.chatOnce(requestCtx, model, messages, temperature, false, format)
+	return c.chatOnce(requestCtx, model, messages, temperature, format)
 }
 
 // ShouldFallbackModel reports whether another local chat model should be tried.
@@ -119,19 +111,17 @@ func ShouldFallbackModel(err error) bool {
 	return statusErr.StatusCode == http.StatusBadRequest || statusErr.StatusCode == http.StatusNotFound
 }
 
-func chatPayload(model string, messages []Message, temperature float64, disableThinking bool, format any) map[string]any {
+func chatPayload(model string, messages []Message, temperature float64, format any) map[string]any {
 	payload := map[string]any{
 		"model":    model,
 		"messages": messages,
 		"stream":   false,
-		"options":  modelOptions(model, temperature),
+		"options": map[string]any{
+			"temperature": temperature,
+		},
 	}
 	if format != nil {
 		payload["format"] = format
-	}
-
-	if disableThinking && usesThinkingToggle(model) {
-		payload["think"] = false
 	}
 
 	return payload
@@ -142,7 +132,6 @@ func (c *Client) chatOnce(
 	model string,
 	messages []Message,
 	temperature float64,
-	disableThinking bool,
 	format any,
 ) (ChatResult, error) {
 	var response struct {
@@ -152,7 +141,7 @@ func (c *Client) chatOnce(
 		} `json:"message"`
 	}
 
-	err := c.doJSON(ctx, http.MethodPost, "/api/chat", chatPayload(model, messages, temperature, disableThinking, format), &response)
+	err := c.doJSON(ctx, http.MethodPost, "/api/chat", chatPayload(model, messages, temperature, format), &response)
 	if err != nil {
 		return ChatResult{}, err
 	}
@@ -161,34 +150,6 @@ func (c *Client) chatOnce(
 		Model:   response.Model,
 		Content: strings.TrimSpace(response.Message.Content),
 	}, nil
-}
-
-func modelOptions(model string, temperature float64) map[string]any {
-	options := map[string]any{
-		"temperature": temperature,
-	}
-
-	if !strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "qwen3") {
-		return options
-	}
-
-	options["top_k"] = 40
-	options["top_p"] = 0.85
-
-	return options
-}
-
-func shouldRetryWithoutThink(model string, err error) bool {
-	if !usesThinkingToggle(model) {
-		return false
-	}
-
-	var statusErr StatusError
-	return errors.As(err, &statusErr) && statusErr.StatusCode == http.StatusBadRequest
-}
-
-func usesThinkingToggle(model string) bool {
-	return strings.HasPrefix(strings.ToLower(strings.TrimSpace(model)), "qwen3")
 }
 
 // Embed generates an embedding for a single input.

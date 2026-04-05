@@ -138,7 +138,6 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 	threadEpisodes = trimCurrentUserEcho(request.Text, threadEpisodes)
-	profile := analyseQuery(request.Text, threadEpisodes)
 
 	runtimeState, err := s.memoryStateText(ctx)
 	if err != nil {
@@ -156,8 +155,8 @@ func (s *Service) Respond(ctx context.Context, request Request) (Response, error
 		return Response{}, err
 	}
 
-	retrieval = adjustRetrievalForQuery(request.Text, request.ChannelID, request.ThreadTS, threadEpisodes, retrieval)
-	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, runtimeState, searchResults, usedWeb, profile)
+	retrieval = adjustRetrievalForQuery(request.ChannelID, request.ThreadTS, threadEpisodes, retrieval)
+	userPrompt := buildUserPrompt(request.Text, retrieval, threadEpisodes, runtimeState, searchResults, usedWeb)
 	messages := buildChatMessages(systemPrompt, userPrompt, threadEpisodes)
 	result, err := s.chatWithFallback(ctx, cfg, messages, output.AnswerSchema())
 	if err != nil {
@@ -360,7 +359,6 @@ func buildUserPrompt(
 	runtimeState string,
 	searchResults []web.Result,
 	usedWeb bool,
-	profile queryProfile,
 ) string {
 	var builder strings.Builder
 	builder.WriteString("Internal context below is for reasoning only.\n")
@@ -374,7 +372,7 @@ func buildUserPrompt(
 	builder.WriteString("- Stay restrained and useful, but do not sound generic.\n\n")
 	builder.WriteString("User request:\n")
 	builder.WriteString(query)
-	builder.WriteString(renderThreadSection(threadEpisodes, profile))
+	builder.WriteString(renderThreadSection(threadEpisodes))
 	builder.WriteString("\n\nRelevant memory:\n")
 	builder.WriteString(renderMemoryContext(retrieval))
 	if runtimeState != "" {
@@ -388,24 +386,17 @@ func buildUserPrompt(
 		builder.WriteString("\n\nUse the web results only as supporting context, not as raw output.")
 	}
 
-	if profile.MetaReflection {
-		builder.WriteString("\n\nMeta-question guidance:\n")
-		builder.WriteString("- This question is about rook, not the user. Answer from rook's own perspective.\n")
-		builder.WriteString("- Name something specific: a pattern you noticed, something you are uncertain about, or an observation from recent memory.\n")
-		builder.WriteString("- Draw on Relevant memory and Current runtime state for concrete material.\n")
-		builder.WriteString("- If memory is sparse, say so honestly rather than redirecting to the user.\n")
-	}
-	builder.WriteString("\n\nState guidance:\n")
-	builder.WriteString("- If the user asks about your memory, state, or continuity, answer concretely from Current runtime state and Relevant memory.\n")
-	builder.WriteString("- Distinguish durable memory from recent thread context when that matters.\n")
-	builder.WriteString("- If something is still sparse or immature, say that plainly instead of bluffing.\n")
+	builder.WriteString("\n\nConversational guidance:\n")
+	builder.WriteString("- If the user asks about rook (your mind, feelings, state), answer from rook's own perspective using memory and runtime state.\n")
+	builder.WriteString("- If the user asks about your memory, state, or continuity, answer concretely from the sections above.\n")
+	builder.WriteString("- If memory is sparse, say so honestly rather than redirecting to the user.\n")
 
 	builder.WriteString("\n\nReply now with exactly one JSON object matching the schema.")
 
 	return builder.String()
 }
 
-func renderThreadSection(threadEpisodes []memory.Episode, profile queryProfile) string {
+func renderThreadSection(threadEpisodes []memory.Episode) string {
 	if len(threadEpisodes) == 0 {
 		return ""
 	}
@@ -413,11 +404,9 @@ func renderThreadSection(threadEpisodes []memory.Episode, profile queryProfile) 
 	var builder strings.Builder
 	builder.WriteString("\n\nThread continuation instructions:")
 	builder.WriteString("\nThe preceding assistant/user messages are the live thread. Continue it naturally.")
-	builder.WriteString("\nRespond to the latest user turn without restarting the conversation from scratch.")
-	builder.WriteString("\nDo not reuse your previous reply's opening words, signature phrasing, or metaphor unless the user clearly asks for that exact wording.")
-	if profile.ShortThreadFollowUp {
-		builder.WriteString("\nThis is a short follow-up. Do not repeat the previous reply. Unpack it, answer the implied question, or name concrete examples.")
-	}
+	builder.WriteString("\nRespond to the latest user turn without restarting the conversation.")
+	builder.WriteString("\nDo not reuse your previous reply's opening words, phrasing, or metaphor.")
+	builder.WriteString("\nIf the latest message is a short follow-up, advance or clarify rather than restating.")
 
 	return builder.String()
 }

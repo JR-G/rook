@@ -160,7 +160,6 @@ func TestChatFallbackAndWebHelpers(t *testing.T) {
 		"",
 		[]web.Result{{Title: "A", URL: "https://example.com"}},
 		true,
-		analyseQuery("what changed?", nil),
 	)
 	if !strings.Contains(prompt, "Live web results") {
 		t.Fatalf("unexpected user prompt %q", prompt)

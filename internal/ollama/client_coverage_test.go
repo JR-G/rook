@@ -2,7 +2,6 @@ package ollama
 
 import (
 	"context"
-	"encoding/json"
 	"io"
 	"net/http"
 	"strings"
@@ -10,55 +9,33 @@ import (
 	"time"
 )
 
-func TestChatRetriesWithoutThink(t *testing.T) {
+func TestChatStructuredBadRequestFailsDirectly(t *testing.T) {
 	t.Parallel()
 
 	requestCount := 0
 	client := NewWithHTTPClient("http://ollama.test", time.Second, time.Second, &http.Client{
 		Transport: roundTripFunc(func(request *http.Request) (*http.Response, error) {
 			requestCount++
-
-			var payload map[string]any
-			if err := json.NewDecoder(request.Body).Decode(&payload); err != nil {
-				t.Fatalf("decode payload: %v", err)
-			}
-
-			switch requestCount {
-			case 1:
-				if payload["think"] != false {
-					t.Fatalf("expected first request to disable thinking, got %#v", payload)
-				}
-				return &http.Response{
-					StatusCode: http.StatusBadRequest,
-					Body:       io.NopCloser(strings.NewReader("think flag unsupported")),
-					Header:     make(http.Header),
-				}, nil
-			default:
-				if _, ok := payload["think"]; ok {
-					t.Fatalf("expected retry request to omit think flag, got %#v", payload)
-				}
-			}
-
 			return &http.Response{
-				StatusCode: http.StatusOK,
-				Body:       io.NopCloser(strings.NewReader(`{"model":"qwen3:4b","message":{"content":"ok"}}`)),
+				StatusCode: http.StatusBadRequest,
+				Body:       io.NopCloser(strings.NewReader("bad request")),
 				Header:     make(http.Header),
 			}, nil
 		}),
 	})
 
-	result, err := client.ChatStructured(
+	_, err := client.ChatStructured(
 		context.Background(),
-		"qwen3:4b",
+		"gemma4:e4b",
 		[]Message{{Role: "user", Content: "hi"}},
 		0.7,
 		map[string]any{"type": "object"},
 	)
-	if err != nil {
-		t.Fatalf("chat retry failed: %v", err)
+	if err == nil {
+		t.Fatal("expected bad request to fail")
 	}
-	if requestCount != 2 || result.Content != "ok" {
-		t.Fatalf("unexpected retry result %#v after %d requests", result, requestCount)
+	if requestCount != 1 {
+		t.Fatalf("expected single request attempt, got %d", requestCount)
 	}
 }
 

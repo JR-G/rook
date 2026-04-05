@@ -47,31 +47,17 @@ func TestOllamaHelperFunctions(t *testing.T) {
 	if ShouldFallbackModel(errors.New("boom")) {
 		t.Fatal("did not expect plain error to trigger fallback")
 	}
-	if !shouldRetryWithoutThink("qwen3:4b", StatusError{StatusCode: http.StatusBadRequest}) {
-		t.Fatal("expected qwen bad request to retry without think")
-	}
-	if shouldRetryWithoutThink("phi4-mini", StatusError{StatusCode: http.StatusBadRequest}) {
-		t.Fatal("did not expect phi to retry without think")
-	}
-	if !usesThinkingToggle(" QWEN3:4B ") {
-		t.Fatal("expected qwen model to use thinking toggle")
-	}
-
-	qwenOptions := modelOptions("qwen3:4b", 0.7)
-	if qwenOptions["temperature"] != 0.7 || qwenOptions["top_k"] != 40 || qwenOptions["top_p"] != 0.85 {
-		t.Fatalf("unexpected qwen options %#v", qwenOptions)
-	}
-	phiOptions := modelOptions("phi4-mini", 0.2)
-	if len(phiOptions) != 1 || phiOptions["temperature"] != 0.2 {
-		t.Fatalf("unexpected phi options %#v", phiOptions)
-	}
-
-	payload := chatPayload("qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7, true, map[string]any{"type": "object"})
-	if payload["think"] != false {
-		t.Fatalf("expected think=false payload, got %#v", payload)
-	}
+	payload := chatPayload("gemma4:e4b", []Message{{Role: "user", Content: "hi"}}, 0.7, map[string]any{"type": "object"})
 	if payload["format"] == nil {
 		t.Fatalf("expected structured format payload, got %#v", payload)
+	}
+	opts, ok := payload["options"].(map[string]any)
+	if !ok || opts["temperature"] != 0.7 {
+		t.Fatalf("expected temperature in options, got %#v", payload)
+	}
+	plainPayload := chatPayload("gemma4:e4b", []Message{{Role: "user", Content: "hi"}}, 0.5, nil)
+	if plainPayload["format"] != nil {
+		t.Fatalf("expected no format for nil schema, got %#v", plainPayload)
 	}
 }
 
@@ -134,7 +120,7 @@ func TestChatAndEmbedErrorPaths(t *testing.T) {
 		}),
 	})
 
-	if _, err := client.Chat(context.Background(), "qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7); err == nil {
+	if _, err := client.Chat(context.Background(), "gemma4:e4b", []Message{{Role: "user", Content: "hi"}}, 0.7); err == nil {
 		t.Fatal("expected chat to fail")
 	}
 	if requestCount != 1 {
@@ -182,7 +168,7 @@ func TestHealthErrorAndSuccessfulChatPayloadInspection(t *testing.T) {
 				}
 				requests = append(requests, payload)
 				body, _ := json.Marshal(map[string]any{
-					"model": "qwen3:4b",
+					"model": "gemma4:e4b",
 					"message": map[string]any{
 						"content": "ok",
 					},
@@ -204,11 +190,11 @@ func TestHealthErrorAndSuccessfulChatPayloadInspection(t *testing.T) {
 		}),
 	})
 
-	result, err := client.ChatStructured(context.Background(), "qwen3:4b", []Message{{Role: "user", Content: "hi"}}, 0.7, map[string]any{"type": "object"})
+	result, err := client.ChatStructured(context.Background(), "gemma4:e4b", []Message{{Role: "user", Content: "hi"}}, 0.7, map[string]any{"type": "object"})
 	if err != nil || result.Content != "ok" {
 		t.Fatalf("unexpected chat result %#v err=%v", result, err)
 	}
-	if len(requests) != 1 || requests[0]["think"] != false || requests[0]["format"] == nil {
+	if len(requests) != 1 || requests[0]["format"] == nil {
 		t.Fatalf("unexpected chat requests %#v", requests)
 	}
 

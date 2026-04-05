@@ -166,7 +166,7 @@ func TestAgentConfigHelpers(t *testing.T) {
 		t.Fatal("expected empty render helpers")
 	}
 
-	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, "", nil, false, analyseQuery("hello", nil))
+	prompt := buildUserPrompt("hello", memory.RetrievalContext{}, nil, "", nil, false)
 	if !strings.Contains(prompt, "Internal context below is for reasoning only.") {
 		t.Fatalf("expected internal-context prompt guard, got %q", prompt)
 	}
@@ -176,16 +176,11 @@ func TestAgentConfigHelpers(t *testing.T) {
 	if !strings.Contains(prompt, "Let rook's personality come through even in practical answers.") {
 		t.Fatalf("expected general voice guidance in prompt, got %q", prompt)
 	}
-	if strings.Contains(prompt, "Meta-question guidance") {
-		t.Fatalf("did not expect meta-question guidance in ordinary prompt, got %q", prompt)
+	if !strings.Contains(prompt, "Conversational guidance:") {
+		t.Fatalf("expected conversational guidance in prompt, got %q", prompt)
 	}
-
-	metaPrompt := buildUserPrompt("how are you today?", memory.RetrievalContext{}, nil, "", nil, false, analyseQuery("how are you today?", nil))
-	if !strings.Contains(metaPrompt, "Meta-question guidance") {
-		t.Fatalf("expected meta-question guidance in prompt, got %q", metaPrompt)
-	}
-	if !strings.Contains(metaPrompt, "rook's own perspective") {
-		t.Fatalf("expected rook-perspective hint in meta prompt, got %q", metaPrompt)
+	if !strings.Contains(prompt, "rook's own perspective") {
+		t.Fatalf("expected rook-perspective guidance in prompt, got %q", prompt)
 	}
 
 	retrieval := memory.RetrievalContext{
@@ -194,16 +189,12 @@ func TestAgentConfigHelpers(t *testing.T) {
 			{ChannelID: "C2", ThreadTS: "2.0", Source: "assistant", Summary: "Older historical reply"},
 		},
 	}
-	adjusted := adjustRetrievalForQuery("how are you today?", "C1", "1.0", nil, retrieval)
-	if len(adjusted.Episodes) != 0 {
-		t.Fatalf("expected meta-query retrieval to drop historical episodes, got %#v", adjusted.Episodes)
-	}
-	ordinary := adjustRetrievalForQuery("what changed?", "C1", "1.0", nil, retrieval)
+	ordinary := adjustRetrievalForQuery("C1", "1.0", nil, retrieval)
 	if len(ordinary.Episodes) != 1 || ordinary.Episodes[0].ChannelID != "C2" {
 		t.Fatalf("unexpected ordinary-query retrieval %#v", ordinary.Episodes)
 	}
-	threadAdjusted := adjustRetrievalForQuery("like?", "C1", "1.0", []memory.Episode{
-		{Source: "assistant", Text: "Steady."},
+	threadAdjusted := adjustRetrievalForQuery("C1", "1.0", []memory.Episode{
+		{Source: "assistant", Text: "Earlier reply."},
 	}, retrieval)
 	if len(threadAdjusted.Episodes) != 0 {
 		t.Fatalf("expected active-thread retrieval to drop historical episodes, got %#v", threadAdjusted.Episodes)
@@ -214,12 +205,11 @@ func TestAgentConfigHelpers(t *testing.T) {
 		memory.RetrievalContext{},
 		[]memory.Episode{
 			{Source: "user", Summary: "how are you today?"},
-			{Source: "assistant", Summary: "Steady. I'm focused on keeping your week legible."},
+			{Source: "assistant", Summary: "Focused on keeping your week legible."},
 		},
 		"",
 		nil,
 		false,
-		analyseQuery("oh really?", []memory.Episode{{Source: "assistant", Text: "Steady."}}),
 	)
 	if !strings.Contains(threadPrompt, "Thread continuation instructions:") {
 		t.Fatalf("expected thread continuation instructions in prompt, got %q", threadPrompt)
@@ -228,13 +218,7 @@ func TestAgentConfigHelpers(t *testing.T) {
 		t.Fatalf("expected continuation guidance in prompt, got %q", threadPrompt)
 	}
 	if !strings.Contains(threadPrompt, "short follow-up") {
-		t.Fatalf("expected anti-repetition guidance in prompt, got %q", threadPrompt)
-	}
-	if !strings.Contains(threadPrompt, "Do not repeat the previous reply") {
-		t.Fatalf("expected explicit follow-up unpacking guidance in prompt, got %q", threadPrompt)
-	}
-	if strings.Contains(threadPrompt, "[assistant] Steady. I'm focused on keeping your week legible.") {
-		t.Fatalf("thread episode text should be in chat messages not user prompt, got %q", threadPrompt)
+		t.Fatalf("expected short follow-up guidance in prompt, got %q", threadPrompt)
 	}
 
 	memoryPrompt := buildUserPrompt(
@@ -244,48 +228,29 @@ func TestAgentConfigHelpers(t *testing.T) {
 		"- local memory db healthy: true\n- durable memory items: 4",
 		nil,
 		false,
-		analyseQuery("how is your memory?", nil),
 	)
 	if !strings.Contains(memoryPrompt, "Current runtime state:") {
 		t.Fatalf("expected runtime state in memory-self prompt, got %q", memoryPrompt)
 	}
 	if !strings.Contains(memoryPrompt, "If the user asks about your memory, state, or continuity") {
-		t.Fatalf("expected general state guidance in prompt, got %q", memoryPrompt)
+		t.Fatalf("expected state guidance in prompt, got %q", memoryPrompt)
 	}
-	if !analyseQuery("like?", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
-		t.Fatal("expected short thread follow-up to be detected")
-	}
-	if analyseQuery("", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
-		t.Fatal("expected empty query not to be short follow-up")
-	}
-	if analyseQuery("like?", nil).ShortThreadFollowUp {
-		t.Fatal("expected nil episodes not to trigger short follow-up")
-	}
-	if !analyseQuery("is that right?", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
-		t.Fatal("expected short question to be detected as follow-up")
-	}
-	if analyseQuery("??!!", []memory.Episode{{Source: "assistant", Text: "Steady."}}).ShortThreadFollowUp {
-		t.Fatal("expected punctuation-only query not to be follow-up")
-	}
+
 	if trimCurrentUserEcho("anything", nil) != nil {
 		t.Fatal("expected nil return for nil episodes")
 	}
-
 	trimmed := trimCurrentUserEcho("oh really?", []memory.Episode{
-		{Source: "assistant", Text: "Steady."},
+		{Source: "assistant", Text: "Earlier reply."},
 		{Source: "user", Text: "oh really?"},
 	})
 	if len(trimmed) != 1 || trimmed[0].Source != "assistant" {
 		t.Fatalf("unexpected trimmed thread context %#v", trimmed)
 	}
-	if kept := trimCurrentUserEcho("oh really?", []memory.Episode{{Source: "assistant", Text: "Steady."}}); len(kept) != 1 {
+	if kept := trimCurrentUserEcho("oh really?", []memory.Episode{{Source: "assistant", Text: "Earlier."}}); len(kept) != 1 {
 		t.Fatalf("expected unmatched thread context to be kept, got %#v", kept)
 	}
 	if kept := excludeThreadEpisodes(nil, "C1", "1.0"); kept != nil {
 		t.Fatalf("expected nil episode slice to stay nil, got %#v", kept)
-	}
-	if hasAssistantTurn([]memory.Episode{{Source: "user", Text: "hello"}}) {
-		t.Fatal("did not expect user-only thread context to count as assistant context")
 	}
 
 	chatMessages := buildChatMessages("system prompt", "current question", []memory.Episode{
