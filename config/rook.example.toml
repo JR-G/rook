@@ -16,7 +16,7 @@ max_concurrent_handlers = 2
 
 [ollama]
 host = "http://127.0.0.1:11434"
-chat_model = "gemma4:e4b-q4_K_M"
+chat_model = "gemma4:e4b"
 chat_fallback_models = ["qwen3:4b"]
 embedding_model = "nomic-embed-text"
 temperature = 0.7

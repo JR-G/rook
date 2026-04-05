@@ -18,7 +18,7 @@ The runtime keeps internal events, logs, search results, and memory writes separ
 
 ## Model Posture
 
-`rook` defaults to `gemma4:e4b-q4_K_M` with `qwen3:4b` as a local fallback for reliability on small Apple Silicon machines. The design assumes the model is capable but capacity-constrained: it should reason locally, but it should not be trusted as the sole factual store. For that reason:
+`rook` defaults to `gemma4:e4b` with `qwen3:4b` as a local fallback for reliability on small Apple Silicon machines. The design assumes the model is capable but capacity-constrained: it should reason locally, but it should not be trusted as the sole factual store. For that reason:
 
 - durable personal context lives in SQLite memory
 - relevant memory is retrieved into the prompt

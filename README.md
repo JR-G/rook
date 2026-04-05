@@ -21,7 +21,7 @@ brew install ollama
 ollama serve &
 
 # Pull the default chat and embedding models.
-ollama pull gemma4:e4b-q4_K_M
+ollama pull gemma4:e4b
 ollama pull nomic-embed-text
 ```
 
@@ -84,12 +84,12 @@ This starts rook automatically on login and restarts it on failure.
 
 ## Defaults
 
-- Chat model: `gemma4:e4b-q4_K_M` (Google Gemma 4, 4.5B effective parameters, Q4 quantized)
+- Chat model: `gemma4:e4b` (Google Gemma 4, 4.5B effective parameters)
 - Chat fallback model: `qwen3:4b`
 - Embedding model: `nomic-embed-text`
 - Web provider: disabled by default, optional `duckduckgo`
 
-`gemma4:e4b-q4_K_M` is the Q4 quantized variant, which fits comfortably on an 8 GB Mac mini (~5 GB) while retaining native structured output, function calling, and strong conversational quality. `qwen3:4b` is kept as a fallback.
+`gemma4:e4b` offers native structured output, function calling, and strong conversational quality for its size. On an 8 GB Mac mini it will use swap; if that causes sluggishness, switch to `gemma4:e2b` or `qwen3:4b` in the config. `qwen3:4b` is kept as the default fallback.
 
 ## Docs
 
