@@ -10,6 +10,8 @@ if [ ! -f "$keychain_path" ]; then
   exit 1
 fi
 
+security unlock-keychain "$keychain_path" 2>/dev/null || true
+
 store_secret() {
   local account="$1"
   local secret="$2"
