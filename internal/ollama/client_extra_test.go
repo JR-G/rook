@@ -221,4 +221,13 @@ func TestWrapUserVisibleMappings(t *testing.T) {
 	if got := failures.Message(WrapUserVisible(errors.New("plain"))); got != "" {
 		t.Fatalf("did not expect plain error to become user-visible, got %q", got)
 	}
+	if got := failures.Message(WrapUserVisible(context.Canceled)); !strings.Contains(got, "stopped") {
+		t.Fatalf("expected canceled message, got %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(nil)); got != "" {
+		t.Fatalf("expected empty message for nil error, got %q", got)
+	}
+	if got := failures.Message(WrapUserVisible(StatusError{StatusCode: http.StatusBadRequest, Message: "unknown error"})); got != "" {
+		t.Fatalf("expected empty for unrecognised status error, got %q", got)
+	}
 }
