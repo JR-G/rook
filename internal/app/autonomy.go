@@ -343,9 +343,6 @@ func (s *Service) reflectIfDue(ctx context.Context) error {
 	}
 
 	sinceLast := episodesSince(recentEpisodes, cutoff)
-	if len(sinceLast) == 0 {
-		return nil
-	}
 
 	text, err := s.composeReflection(ctx, cfg, sinceLast)
 	if err != nil {

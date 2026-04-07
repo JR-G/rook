@@ -393,6 +393,65 @@ func TestReflectIfDueStoreError(t *testing.T) {
 	}
 }
 
+func TestReflectIfDuePostsDuringQuietPeriod(t *testing.T) {
+	t.Parallel()
+
+	clockNow := time.Date(2026, time.April, 6, 0, 0, 0, 0, time.UTC)
+	clock := func() time.Time { return clockNow }
+	service := newTestServiceWithClock(t, clock)
+	service.cfg.Autonomy.Enabled = true
+	service.cfg.Autonomy.ReflectionEnabled = true
+	service.cfg.Autonomy.ReflectionInterval = config.Duration{Duration: 24 * time.Hour}
+	service.persona = seededPersonaManager(t, service)
+	service.ollama = &autonomyOllama{
+		fakeOllama: fakeOllama{
+			health:    ollama.Health{Reachable: true},
+			embedding: []float64{1, 0},
+		},
+		results: []ollama.ChatResult{
+			{Model: "phi4-mini", Content: `{"answer":"Yesterday's reflection."}`},
+			{Model: "phi4-mini", Content: `{"answer":"Nothing much happened today."}`},
+		},
+	}
+
+	// Record activity and a reflection on April 6.
+	if _, err := service.store.RecordEpisode(context.Background(), memory.EpisodeInput{
+		ChannelID: "C1",
+		UserID:    "U1",
+		Role:      "user",
+		Source:    "user",
+		Text:      "old message",
+	}); err != nil {
+		t.Fatalf("RecordEpisode: %v", err)
+	}
+	if err := service.reflectIfDue(context.Background()); err != nil {
+		t.Fatalf("reflectIfDue day 1: %v", err)
+	}
+
+	// Advance to April 7 — no new activity, but reflection should still fire.
+	clockNow = time.Date(2026, time.April, 7, 12, 0, 0, 0, time.UTC)
+
+	if err := service.reflectIfDue(context.Background()); err != nil {
+		t.Fatalf("reflectIfDue during quiet period: %v", err)
+	}
+
+	episodes, err := service.store.RecentEpisodes(context.Background(), 10)
+	if err != nil {
+		t.Fatalf("RecentEpisodes: %v", err)
+	}
+
+	var found bool
+	for _, ep := range episodes {
+		if ep.Source == sourceReflection && strings.Contains(ep.Text, "Nothing much") {
+			found = true
+			break
+		}
+	}
+	if !found {
+		t.Fatal("expected a reflection episode even during a quiet period")
+	}
+}
+
 func TestPostReflectionHandlesTransportError(t *testing.T) {
 	t.Parallel()
 
