@@ -12,6 +12,7 @@ import (
 const (
 	weeknoteHighlightLimit = 3
 	weeknoteThemeLimit     = 2
+	noRecordedOpenings     = "- none recorded"
 )
 
 var (
@@ -397,6 +398,58 @@ func formatReflectionCues(episodes []memory.Episode) string {
 	}
 
 	return strings.Join(lines, "\n")
+}
+
+func recentReflectionEpisodes(episodes []memory.Episode, limit int) []memory.Episode {
+	if limit <= 0 {
+		return nil
+	}
+
+	filtered := make([]memory.Episode, 0, limit)
+	for _, ep := range episodes {
+		if ep.Source != sourceReflection {
+			continue
+		}
+		filtered = append(filtered, ep)
+		if len(filtered) == limit {
+			break
+		}
+	}
+
+	return filtered
+}
+
+func formatReflectionOpenings(reflections []memory.Episode) string {
+	if len(reflections) == 0 {
+		return noRecordedOpenings
+	}
+
+	lines := make([]string, 0, len(reflections))
+	for _, reflection := range reflections {
+		opening := reflectionOpening(reflection.Text)
+		if opening == "" {
+			continue
+		}
+		lines = append(lines, "- "+opening)
+	}
+	if len(lines) == 0 {
+		return noRecordedOpenings
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func reflectionOpening(text string) string {
+	cleaned := compactWeeknoteTextLimit(text, 60)
+	words := strings.Fields(cleaned)
+	if len(words) == 0 {
+		return ""
+	}
+	if len(words) > 6 {
+		words = words[:6]
+	}
+
+	return strings.Join(words, " ")
 }
 
 func reflectionThemeLines(themes []weeknoteTheme) []string {

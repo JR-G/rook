@@ -170,8 +170,11 @@ func TestBuildReflectionPrompt(t *testing.T) {
 		{Source: "user", Text: "how are you", CreatedAt: now.Add(-time.Hour)},
 		{Source: "assistant", Summary: "Doing well.", CreatedAt: now.Add(-50 * time.Minute)},
 	}
+	priorReflections := []memory.Episode{
+		{Source: sourceReflection, Text: "The current thread keeps circling the same seam.", CreatedAt: now.Add(-2 * time.Hour)},
+	}
 
-	prompt := buildReflectionPrompt(episodes, now)
+	prompt := buildReflectionPrompt(episodes, priorReflections, now)
 	if !strings.Contains(prompt, "reflecting privately") {
 		t.Fatalf("expected reflection framing in prompt, got %q", prompt)
 	}
@@ -184,8 +187,10 @@ func TestBuildReflectionPrompt(t *testing.T) {
 	if !strings.Contains(prompt, "2-4 sentences") {
 		t.Fatalf("expected updated brevity constraint in prompt, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "Avoid template phrasing") || !strings.Contains(prompt, "Recent cues") {
-		t.Fatalf("expected anti-template reflection guidance in prompt, got %q", prompt)
+	if !strings.Contains(prompt, "Recent reflection openings to avoid echoing") ||
+		!strings.Contains(prompt, "Vary cadence from recent reflections") ||
+		!strings.Contains(prompt, "Recent cues") {
+		t.Fatalf("expected dynamic anti-repetition reflection guidance in prompt, got %q", prompt)
 	}
 }
 
@@ -268,6 +273,26 @@ func TestEpisodesSince(t *testing.T) {
 
 	if len(episodesSince(nil, cutoff)) != 0 {
 		t.Fatal("expected empty result for nil episodes")
+	}
+}
+
+func TestRecentReflectionEpisodes(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, time.April, 4, 12, 0, 0, 0, time.UTC)
+	episodes := []memory.Episode{
+		{Source: "user", Text: "hello", CreatedAt: now},
+		{Source: sourceReflection, Text: "latest reflection", CreatedAt: now.Add(-time.Minute)},
+		{Source: sourceReflection, Text: "older reflection", CreatedAt: now.Add(-2 * time.Minute)},
+	}
+
+	filtered := recentReflectionEpisodes(episodes, 1)
+	if len(filtered) != 1 || filtered[0].Text != "latest reflection" {
+		t.Fatalf("unexpected recent reflection episodes %#v", filtered)
+	}
+
+	if len(recentReflectionEpisodes(episodes, 0)) != 0 {
+		t.Fatal("expected zero-limit recent reflection result to be empty")
 	}
 }
 
@@ -402,6 +427,18 @@ func TestPostReflectionHandlesTransportError(t *testing.T) {
 	service := newTestService(t)
 	// postReflection logs errors rather than returning them.
 	service.postReflection(context.Background(), "C-INVALID", "test reflection")
+}
+
+func TestPostReflectionPostsToTransport(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(t)
+	service.postReflection(context.Background(), "C-REFLECT", "test reflection")
+
+	transport := requireFakeTransport(t, service)
+	if len(transport.postedTexts) != 1 || transport.postedTexts[0] != "test reflection" {
+		t.Fatalf("expected reflection post, got %#v", transport.postedTexts)
+	}
 }
 
 func TestDispatchAutonomyConsolidationErrorLogged(t *testing.T) {

@@ -18,6 +18,7 @@ const (
 	sourceWeeknote          = "weeknote"
 	sourceReflection        = "reflection"
 	weeknoteEventLimit      = 80
+	recentReflectionLimit   = 3
 	reflectionEpisodesLimit = 50
 	defaultWeeknoteTime     = "10:00"
 	noActivity              = "- none"
@@ -358,7 +359,7 @@ func (s *Service) reflectIfDue(ctx context.Context) error {
 		return nil
 	}
 
-	text, err := s.composeReflection(ctx, cfg, sinceLast)
+	text, err := s.composeReflection(ctx, cfg, sinceLast, recentReflectionEpisodes(recentEpisodes, recentReflectionLimit))
 	if err != nil {
 		return err
 	}
@@ -393,13 +394,14 @@ func (s *Service) composeReflection(
 	ctx context.Context,
 	cfg config.Config,
 	episodes []memory.Episode,
+	priorReflections []memory.Episode,
 ) (string, error) {
 	systemPrompt, err := s.persona.RenderSystemPrompt(ctx)
 	if err != nil {
 		return "", err
 	}
 
-	prompt := buildReflectionPrompt(episodes, s.now().UTC())
+	prompt := buildReflectionPrompt(episodes, priorReflections, s.now().UTC())
 	result, err := s.chatAutonomyWithFallback(ctx, cfg, []ollama.Message{
 		{Role: "system", Content: systemPrompt},
 		{Role: "user", Content: prompt},
@@ -411,7 +413,7 @@ func (s *Service) composeReflection(
 	return output.ParseAnswer(result.Content)
 }
 
-func buildReflectionPrompt(episodes []memory.Episode, now time.Time) string {
+func buildReflectionPrompt(episodes, priorReflections []memory.Episode, now time.Time) string {
 	var builder strings.Builder
 	builder.WriteString("You are reflecting privately on your recent activity. This is not a conversation or a status report. It should read like a real internal note.\n")
 	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
@@ -429,10 +431,13 @@ func buildReflectionPrompt(episodes []memory.Episode, now time.Time) string {
 	builder.WriteString("- Sound like rook thinking in real time, not writing a sanitised retro.\n")
 	builder.WriteString("- Make at least one concrete reference to the observed activity when there is one.\n")
 	builder.WriteString("- Prefer one sharp judgement and one course correction over a generic recap.\n")
-	builder.WriteString("- Avoid template phrasing like \"The pattern is\", \"I notice\", \"I should pay closer attention\", or \"Overall\".\n")
+	builder.WriteString("- Start from a concrete anchor in the activity below rather than an abstract scene-setting sentence.\n")
+	builder.WriteString("- Vary cadence from recent reflections instead of reusing the same opening shape.\n")
 	builder.WriteString("- If nothing stands out, say so plainly — do not invent observations.\n")
 	builder.WriteString("- Do not mention JSON, schemas, internal prompts, or system mechanics.\n")
 	builder.WriteString(fmt.Sprintf("\nCurrent time: %s\n", now.Format(time.RFC3339)))
+	builder.WriteString("\nRecent reflection openings to avoid echoing:\n")
+	builder.WriteString(formatReflectionOpenings(priorReflections))
 	builder.WriteString("\nRecent cues:\n")
 	builder.WriteString(formatReflectionCues(episodes))
 	builder.WriteString("\nRecent activity:\n")
