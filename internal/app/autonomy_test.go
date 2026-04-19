@@ -116,6 +116,30 @@ func TestObserveAmbientActivitySkipsUnsafeCases(t *testing.T) {
 	}
 }
 
+func TestObserveAmbientActivityRecordsBotMessagesWhenBotUserIDUnknown(t *testing.T) {
+	t.Parallel()
+
+	service := newTestService(t)
+	service.cfg.Autonomy.Enabled = true
+	service.cfg.Autonomy.ObserveAgentChannels = true
+
+	transport := requireFakeTransport(t, service)
+	transport.status = slacktransport.Status{BotID: "B-ROOK"}
+
+	observed, err := service.observeAmbientActivity(context.Background(), slacktransport.InboundMessage{
+		ChannelID: "C1",
+		ThreadTS:  "1.0",
+		BotID:     "B-OTHER",
+		Text:      "agent posted an update",
+	}, false)
+	if err != nil {
+		t.Fatalf("observeAmbientActivity: %v", err)
+	}
+	if !observed {
+		t.Fatal("expected ambient activity to be observed when bot user ID is unknown")
+	}
+}
+
 func TestRecordObservedEpisodeError(t *testing.T) {
 	t.Parallel()
 
@@ -222,13 +246,59 @@ func TestWeeknoteHelpers(t *testing.T) {
 	if rendered := formatWeeknoteEpisodes(nil); rendered != "- none" {
 		t.Fatalf("unexpected empty weeknote render %q", rendered)
 	}
+	if fallback := fallbackWeeknoteText(nil); fallback != "📭 Quiet week. No agent activity worth surfacing, so I'm leaving the channel clean." {
+		t.Fatalf("unexpected empty fallback weeknote %q", fallback)
+	}
 	rendered := formatWeeknoteEpisodes(filtered)
 	if !strings.Contains(rendered, "actor=B1") || !strings.Contains(rendered, "summary=slightly older") {
 		t.Fatalf("unexpected rendered weeknote episodes %q", rendered)
 	}
+	fallback := fallbackWeeknoteText(filtered)
+	if !strings.Contains(fallback, "📣 *Rook weeknote*") {
+		t.Fatalf("unexpected fallback header %q", fallback)
+	}
+	if !strings.Contains(fallback, "observed 2 agent updates across 2 channels from 2 agents") {
+		t.Fatalf("unexpected fallback weeknote %q", fallback)
+	}
+	if !strings.Contains(fallback, "*👀 Latest turns*") {
+		t.Fatalf("expected latest-turns section in %q", fallback)
+	}
+	if !strings.Contains(fallback, "- most recent") || !strings.Contains(fallback, "- slightly older") {
+		t.Fatalf("expected fallback highlights in %q", fallback)
+	}
+
+	repeatedThread := []memory.Episode{
+		{ChannelID: "C1", UserID: "B1", Source: sourceAmbientAgent, Summary: "JAM-24 blocked after 4 review cycles — needs reassignment or human review", CreatedAt: base.Add(-3 * time.Minute)},
+		{ChannelID: "C1", UserID: "B1", Source: sourceAmbientAgent, Summary: "JAM-24 has had 4 review cycles without resolution — blocking for reassignment.", CreatedAt: base.Add(-2 * time.Minute)},
+		{ChannelID: "C1", UserID: "B1", Source: sourceAmbientAgent, Summary: "Re-reviewing JAM-24 — checking if the feedback was addressed. PR #26.", CreatedAt: base.Add(-time.Minute)},
+	}
+	highlights := weeknoteHighlights(repeatedThread, nil)
+	if len(highlights) != 1 || !strings.Contains(highlights[0], "PR #26") {
+		t.Fatalf("expected repeated ticket updates to collapse into one highlight, got %#v", highlights)
+	}
+	repeatedFallback := fallbackWeeknoteText(repeatedThread)
+	if !strings.Contains(repeatedFallback, "*🔥 Main threads*") {
+		t.Fatalf("expected repeated thread section in %q", repeatedFallback)
+	}
+	if strings.Contains(repeatedFallback, "\n- JAM-24 blocked after 4 review cycles") ||
+		strings.Contains(repeatedFallback, "\n- JAM-24 has had 4 review cycles without resolution") {
+		t.Fatalf("expected duplicate JAM-24 bullets to be synthesised, got %q", repeatedFallback)
+	}
+	if got := compactWeeknoteText("  first line\nsecond line  "); got != "first line second line" {
+		t.Fatalf("unexpected compact weeknote text %q", got)
+	}
+	if got := compactWeeknoteText(strings.Repeat("a", 220)); !strings.HasSuffix(got, "…") {
+		t.Fatalf("expected compact weeknote text to truncate, got %q", got)
+	}
+	if got := pluralizeWeeknote("channel", 1); got != "channel" {
+		t.Fatalf("unexpected singular pluralize result %q", got)
+	}
+	if got := pluralizeWeeknote("channel", 2); got != "channels" {
+		t.Fatalf("unexpected plural pluralize result %q", got)
+	}
 
 	prompt := buildWeeknotePrompt(filtered, base.AddDate(0, 0, -4), base, base.Add(5*time.Minute))
-	if !strings.Contains(prompt, "Sound like rook") || !strings.Contains(prompt, "Observed agent activity") {
+	if !strings.Contains(prompt, "marquee recap") || !strings.Contains(prompt, "Derived cues") || !strings.Contains(prompt, "Observed agent activity") {
 		t.Fatalf("unexpected weeknote prompt %q", prompt)
 	}
 

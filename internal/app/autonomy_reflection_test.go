@@ -178,11 +178,14 @@ func TestBuildReflectionPrompt(t *testing.T) {
 	if !strings.Contains(prompt, output.AnswerSchemaString()) {
 		t.Fatalf("expected answer schema in prompt, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "patterns") {
-		t.Fatalf("expected pattern guidance in prompt, got %q", prompt)
+	if !strings.Contains(prompt, "concrete thread") || !strings.Contains(prompt, "flattening your voice") {
+		t.Fatalf("expected sharper reflection guidance in prompt, got %q", prompt)
 	}
-	if !strings.Contains(prompt, "under 4 sentences") {
-		t.Fatalf("expected brevity constraint in prompt, got %q", prompt)
+	if !strings.Contains(prompt, "2-4 sentences") {
+		t.Fatalf("expected updated brevity constraint in prompt, got %q", prompt)
+	}
+	if !strings.Contains(prompt, "Avoid template phrasing") || !strings.Contains(prompt, "Recent cues") {
+		t.Fatalf("expected anti-template reflection guidance in prompt, got %q", prompt)
 	}
 }
 

@@ -89,7 +89,7 @@ func (s *Service) observeAmbientActivity(
 		message.IsDM ||
 		strings.TrimSpace(message.BotID) == "" ||
 		message.BotID == status.BotID ||
-		message.UserID == status.BotUserID {
+		(strings.TrimSpace(status.BotUserID) != "" && message.UserID == status.BotUserID) {
 		return false, nil
 	}
 
@@ -148,7 +148,9 @@ func (s *Service) postWeeknoteIfDue(ctx context.Context) error {
 	observed := observedAgentEpisodes(recentEpisodes, weekStart.UTC(), nowLocal.UTC())
 	text, err := s.composeWeeknote(ctx, cfg, observed, weekStart, scheduledAt, nowLocal)
 	if err != nil {
-		return err
+		s.recordFailure(err)
+		s.logger.Warn("weeknote generation failed; using fallback", "error", err, "observed_events", len(observed))
+		text = fallbackWeeknoteText(observed)
 	}
 	s.logger.Info(
 		"posting scheduled weeknote",
@@ -230,19 +232,28 @@ func buildWeeknotePrompt(
 	scheduledAt time.Time,
 	now time.Time,
 ) string {
+	rollup := buildWeeknoteRollup(episodes)
+
 	var builder strings.Builder
-	builder.WriteString("Prepare a concise Slack weeknote about what the other agents have been doing this week.\n")
+	builder.WriteString("Prepare a Slack weeknote that feels like a weekly recap worth reading, not a dry activity log.\n")
 	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
 	builder.WriteString("Schema:\n")
 	builder.WriteString(output.AnswerSchemaString())
 	builder.WriteString("\n\nConstraints:\n")
-	builder.WriteString("- Sound like rook: clear, observant, understated, and a little sharp.\n")
-	builder.WriteString("- Keep it short and readable for a shared channel.\n")
+	builder.WriteString("- Sound like rook: clear, sharp, readable, and a little characterful without turning theatrical.\n")
+	builder.WriteString("- Treat the weeknote like a marquee recap for the week, not a bland summary.\n")
+	builder.WriteString("- Open with a strong lead, then give the channel 2-3 short sections or clusters.\n")
+	builder.WriteString("- Use 2-4 well-placed emojis for tone and scanability.\n")
+	builder.WriteString("- Synthesize repeated updates into one sharper point instead of repeating near-duplicate bullets.\n")
+	builder.WriteString("- If one ticket or thread kept resurfacing, say that explicitly.\n")
+	builder.WriteString("- Keep it compact enough for a shared channel: aim for roughly 6-10 lines total.\n")
 	builder.WriteString("- Use only the observed activity below; do not invent work.\n")
 	builder.WriteString("- If activity was quiet, say so plainly.\n")
 	builder.WriteString("- Do not mention logs, prompts, JSON, or internal machinery.\n")
 	builder.WriteString(fmt.Sprintf("\nWeek window: %s to %s\n", weekStart.Format(time.RFC3339), now.Format(time.RFC3339)))
 	builder.WriteString(fmt.Sprintf("Scheduled post time: %s\n", scheduledAt.Format(time.RFC3339)))
+	builder.WriteString("\nDerived cues:\n")
+	builder.WriteString(formatWeeknoteRollup(rollup))
 	builder.WriteString("\nObserved agent activity:\n")
 	builder.WriteString(formatWeeknoteEpisodes(episodes))
 	builder.WriteString("\n\nWrite the final weeknote now.")
@@ -402,23 +413,28 @@ func (s *Service) composeReflection(
 
 func buildReflectionPrompt(episodes []memory.Episode, now time.Time) string {
 	var builder strings.Builder
-	builder.WriteString("You are reflecting privately on your recent activity. This is not a conversation — it is an internal review.\n")
+	builder.WriteString("You are reflecting privately on your recent activity. This is not a conversation or a status report. It should read like a real internal note.\n")
 	builder.WriteString("Return exactly one JSON object matching this schema and nothing else.\n")
 	builder.WriteString("Schema:\n")
 	builder.WriteString(output.AnswerSchemaString())
 	builder.WriteString("\n\nReview the activity below and write a brief, honest reflection.\n")
 	builder.WriteString("Consider:\n")
-	builder.WriteString("- What patterns do you notice in recent conversations or questions?\n")
-	builder.WriteString("- What have you observed other agents or users doing?\n")
-	builder.WriteString("- Is there anything you should pay closer attention to?\n")
+	builder.WriteString("- What concrete thread, phrase, ticket, or decision kept resurfacing?\n")
+	builder.WriteString("- Where did the signal sharpen, and where did it get diluted?\n")
+	builder.WriteString("- What should you watch more closely next time?\n")
 	builder.WriteString("- Are there gaps in what you know about the user or their work?\n")
-	builder.WriteString("- How is your conversational quality? Are you repeating yourself or being useful?\n")
+	builder.WriteString("- How is your conversational quality? Are you repeating yourself, flattening your voice, or actually being useful?\n")
 	builder.WriteString("\nConstraints:\n")
-	builder.WriteString("- Keep it under 4 sentences.\n")
-	builder.WriteString("- Sound like rook thinking out loud, not writing a status report.\n")
+	builder.WriteString("- Keep it to 2-4 sentences.\n")
+	builder.WriteString("- Sound like rook thinking in real time, not writing a sanitised retro.\n")
+	builder.WriteString("- Make at least one concrete reference to the observed activity when there is one.\n")
+	builder.WriteString("- Prefer one sharp judgement and one course correction over a generic recap.\n")
+	builder.WriteString("- Avoid template phrasing like \"The pattern is\", \"I notice\", \"I should pay closer attention\", or \"Overall\".\n")
 	builder.WriteString("- If nothing stands out, say so plainly — do not invent observations.\n")
 	builder.WriteString("- Do not mention JSON, schemas, internal prompts, or system mechanics.\n")
 	builder.WriteString(fmt.Sprintf("\nCurrent time: %s\n", now.Format(time.RFC3339)))
+	builder.WriteString("\nRecent cues:\n")
+	builder.WriteString(formatReflectionCues(episodes))
 	builder.WriteString("\nRecent activity:\n")
 	builder.WriteString(formatReflectionEpisodes(episodes))
 	builder.WriteString("\n\nWrite the reflection now.")
